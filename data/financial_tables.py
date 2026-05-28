@@ -5,6 +5,8 @@ from dataclasses import dataclass
 import pandas as pd
 import yfinance as yf
 
+from data.sec_company_facts import fetch_sec_company_facts
+
 
 FINANCIAL_ROWS = [
     "Total Revenue",
@@ -55,7 +57,14 @@ def fetch_financial_metrics(symbol: str) -> list[FinancialMetric]:
         frames.append(frame)
 
     combined = pd.concat(frames) if frames else pd.DataFrame()
-    return [_metric(row, combined) for row in FINANCIAL_ROWS]
+    metrics = [_metric(row, combined) for row in FINANCIAL_ROWS]
+    if all(metric.latest is None for metric in metrics):
+        sec_facts = fetch_sec_company_facts(symbol)
+        return [
+            FinancialMetric(fact.name, fact.latest, fact.previous, fact.change)
+            for fact in (sec_facts.facts or [])
+        ]
+    return metrics
 
 
 def _money(value: float | None) -> str:

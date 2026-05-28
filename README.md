@@ -18,7 +18,7 @@
 - 自动搜索 Yahoo Finance 新闻摘要和 SEC 最近 10-K / 10-Q
 - 自动生成买前检查清单
 - 自动提取最近季度关键财务表格
-- 可选接入 Financial Modeling Prep、Finnhub、Alpha Vantage、EODHD、Twelve Data 免费 API key，补充市值、PE、收入增长、利润率、分析师目标价等字段
+- 可选接入 SEC EDGAR 官方财报、Financial Modeling Prep、Finnhub、Alpha Vantage、EODHD、Twelve Data 免费 API key，补充市值、PE、收入增长、利润率、分析师目标价等字段
 - 自动保存历史快照，并和上次报告对比
 - 多股票输入时生成股票池 / 行业机会评分排序
 - 输入几个字母时，网页会提示可能想搜索的股票代码
@@ -106,6 +106,7 @@ NVDA, AMD, INTC
 
 网页里展开“可选：免费数据源 API key”，可以临时填写：
 
+- `SEC EDGAR 官方财报`，不需要 key，适合补美股收入、净利润、现金流、资产负债表字段
 - `Financial Modeling Prep API key`
 - `Finnhub API key`
 - `Alpha Vantage API key`
@@ -152,7 +153,7 @@ export TWELVE_DATA_API_KEY="你的 Twelve Data key"
 也可以限制只使用部分数据源：
 
 ```bash
-export FREE_DATA_PROVIDERS="fmp,finnhub,alpha_vantage,eodhd,twelve_data"
+export FREE_DATA_PROVIDERS="sec,fmp,finnhub,alpha_vantage,eodhd,twelve_data"
 ```
 
 如果你有自己的 API，可以设置：

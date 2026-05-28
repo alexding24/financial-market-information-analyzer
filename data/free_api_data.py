@@ -8,6 +8,8 @@ from urllib.parse import quote_plus
 import pandas as pd
 import requests
 
+from data.sec_company_facts import fetch_sec_company_facts
+
 
 @dataclass(frozen=True)
 class FreeApiData:
@@ -33,6 +35,7 @@ def fetch_free_api_data(symbol: str) -> FreeApiData:
         "alpha_vantage": _fetch_alpha_vantage_data,
         "eodhd": _fetch_eodhd_data,
         "twelve_data": _fetch_twelve_data,
+        "sec": _fetch_sec_data,
         "custom": _fetch_custom_data,
     }
     selected = _selected_providers(provider_loaders)
@@ -42,7 +45,7 @@ def fetch_free_api_data(symbol: str) -> FreeApiData:
 
 
 def _selected_providers(provider_loaders: dict[str, Any]) -> list[str]:
-    raw_value = os.getenv("FREE_DATA_PROVIDERS", "fmp,finnhub,alpha_vantage,eodhd,twelve_data,custom")
+    raw_value = os.getenv("FREE_DATA_PROVIDERS", "sec,fmp,finnhub,alpha_vantage,eodhd,twelve_data,custom")
     selected = [item.strip().lower() for item in raw_value.split(",") if item.strip()]
     return [provider for provider in selected if provider in provider_loaders]
 
@@ -329,4 +332,12 @@ def _fetch_custom_data(symbol: str) -> FreeApiData:
         revenue_growth=_pick_num(flat, ["revenueGrowth", "QuarterlyRevenueGrowthYOY"]),
         profit_margins=_pick_num(flat, ["profitMargins", "ProfitMargin"]),
         analyst_price_targets=_target_dict(target),
+    )
+
+
+def _fetch_sec_data(symbol: str) -> FreeApiData:
+    facts = fetch_sec_company_facts(symbol)
+    return FreeApiData(
+        revenue_growth=facts.revenue_growth,
+        profit_margins=facts.profit_margins,
     )

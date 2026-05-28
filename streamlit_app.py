@@ -108,12 +108,13 @@ with st.expander("可选：免费数据源 API key"):
         "Alpha Vantage": "alpha_vantage",
         "EODHD": "eodhd",
         "Twelve Data": "twelve_data",
+        "SEC EDGAR 官方财报": "sec",
         "自定义 API": "custom",
     }
     selected_providers = st.multiselect(
         "选择要使用的数据源",
         list(provider_options.keys()),
-        default=["Financial Modeling Prep", "Finnhub", "Alpha Vantage", "EODHD"],
+        default=["SEC EDGAR 官方财报", "Financial Modeling Prep", "Finnhub", "Alpha Vantage", "EODHD"],
     )
     os.environ["FREE_DATA_PROVIDERS"] = ",".join(provider_options[name] for name in selected_providers)
     fmp_api_key = st.text_input("Financial Modeling Prep API key", type="password")
