@@ -40,6 +40,19 @@ COMMON_TICKERS = {
     "ABNB": "Airbnb, Inc.",
     "COIN": "Coinbase Global, Inc.",
     "MSTR": "MicroStrategy Incorporated",
+    "0700.HK": "Tencent Holdings Limited",
+    "9988.HK": "Alibaba Group Holding Limited",
+    "3690.HK": "Meituan",
+    "1810.HK": "Xiaomi Corporation",
+    "0939.HK": "China Construction Bank",
+    "1299.HK": "AIA Group Limited",
+    "600519.SS": "Kweichow Moutai Co., Ltd.",
+    "000858.SZ": "Wuliangye Yibin Co., Ltd.",
+    "300750.SZ": "Contemporary Amperex Technology Co., Limited",
+    "601318.SS": "Ping An Insurance",
+    "600036.SS": "China Merchants Bank",
+    "000333.SZ": "Midea Group Co., Ltd.",
+    "002594.SZ": "BYD Company Limited",
 }
 
 

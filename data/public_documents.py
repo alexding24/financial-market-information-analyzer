@@ -9,6 +9,7 @@ import yfinance as yf
 from bs4 import BeautifulSoup
 
 from analysis.business_signals import SourceDocument
+from data.market_symbols import is_us_symbol
 
 
 SEC_COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
@@ -184,7 +185,13 @@ def fetch_public_documents(symbol: str, company_name: str | None = None) -> Publ
     documents: list[SourceDocument] = []
     notes: list[str] = []
 
-    for result in [fetch_yahoo_news_documents(symbol, company_name), fetch_sec_filing_document(symbol)]:
+    results = [fetch_yahoo_news_documents(symbol, company_name)]
+    if is_us_symbol(symbol):
+        results.append(fetch_sec_filing_document(symbol))
+    else:
+        notes.append(f"{symbol}: 非美股暂不读取 SEC 10-K / 10-Q。")
+
+    for result in results:
         documents.extend(result.documents)
         notes.extend(result.notes)
 

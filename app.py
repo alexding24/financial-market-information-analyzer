@@ -21,6 +21,7 @@ from analysis.research_features import (
 )
 from analysis.stock_summary import comparison_row, summarize_stock
 from data.financial_tables import fetch_financial_metrics, format_financial_metrics
+from data.market_symbols import normalize_symbol
 from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
 
@@ -33,11 +34,11 @@ def save_report(symbol: str, report: str) -> Path:
     return output_path
 
 
-def parse_symbols(raw_symbols: list[str]) -> list[str]:
+def parse_symbols(raw_symbols: list[str], market: str = "auto") -> list[str]:
     symbols: list[str] = []
     for raw_symbol in raw_symbols:
         for part in re.split(r"[\s,]+", raw_symbol):
-            symbol = part.upper().strip()
+            symbol = normalize_symbol(part, market)
             if symbol and symbol not in symbols:
                 symbols.append(symbol)
     return symbols
@@ -127,9 +128,15 @@ def main() -> None:
     parser.add_argument("--tenk-file", help="Text file with recent 10-K notes or text")
     parser.add_argument("--keywords", help="Comma-separated keywords to count")
     parser.add_argument("--auto-research", action="store_true", help="Automatically fetch public news and SEC filings")
+    parser.add_argument(
+        "--market",
+        choices=["auto", "us", "cn", "hk"],
+        default="auto",
+        help="Market used to normalize symbols: auto, us, cn, hk",
+    )
     args = parser.parse_args()
 
-    symbols = parse_symbols(args.symbols)
+    symbols = parse_symbols(args.symbols, args.market)
     if not symbols:
         raise ValueError("请至少输入一个股票代码。")
 

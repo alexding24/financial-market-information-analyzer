@@ -20,6 +20,7 @@ from analysis.research_features import (
 from analysis.stock_summary import comparison_row, summarize_stock
 from app import build_comparison_report, parse_symbols, save_report
 from data.financial_tables import fetch_financial_metrics, format_financial_metrics
+from data.market_symbols import MARKET_OPTIONS
 from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
 from data.ticker_search import suggest_tickers, ticker_from_suggestion
@@ -29,6 +30,8 @@ st.set_page_config(page_title="金融市场信息分析助手", layout="centered
 
 st.title("金融市场信息分析助手")
 
+market_label = st.selectbox("市场", list(MARKET_OPTIONS.keys()), index=0)
+market = MARKET_OPTIONS[market_label]
 symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
 suggestions = suggest_tickers(symbols_text.split(",")[-1].strip())
 if suggestions:
@@ -48,7 +51,7 @@ with st.expander("可选：加入 earnings call、meeting、10-K 业务信号分
     )
 
 if st.button("生成分析报告", type="primary"):
-    symbols = parse_symbols([symbols_text])
+    symbols = parse_symbols([symbols_text], market)
     if not symbols:
         st.warning("请先输入至少一个股票代码。")
     else:

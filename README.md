@@ -5,6 +5,7 @@
 第一版功能：
 
 - 输入股票代码，例如 `AAPL`、`NVDA`、`TSLA`
+- 支持美股、A 股和港股
 - 支持一次输入多个股票代码，例如 `NVDA, AMD, INTC`
 - 自动获取公司基本信息和最近股价
 - 计算简单指标
@@ -52,6 +53,16 @@ python app.py NVDA,AMD,INTC
 
 多个股票会自动生成对比报告和机会评分排序，适合当作 watchlist 或行业股票池来观察。
 
+A 股和港股也可以分析：
+
+```bash
+python app.py 600519 --market cn
+python app.py 0700 --market hk
+python app.py 600519.SS 000858.SZ 0700.HK
+```
+
+自动识别时，6 位数字按 A 股处理，4-5 位数字按港股处理。
+
 报告会显示在屏幕上，也会保存到 `reports/` 文件夹。
 
 如果你有 earnings call、meeting、10-K 的文字或摘要，也可以一起分析：
@@ -89,6 +100,8 @@ NVDA, AMD, INTC
 网页里的“自动搜索公开材料”默认打开，会自动读取 Yahoo Finance 新闻摘要和 SEC 最近 10-K / 10-Q。免费公开数据不一定包含完整 earnings call transcript；如果你有更完整的 transcript，仍然可以粘贴进去补充。
 
 网页输入股票代码时，可以只输入几个字母，例如 `nv`，页面会提示类似 `NVDA - NVIDIA Corporation` 的候选项。
+
+网页里可以在“市场”下拉框选择“自动识别 / 美股 / A股 / 港股”。
 
 每次生成报告时，程序会在 `reports/history/` 里保存一个历史快照。下次再生成同一只股票报告时，会自动比较机会评分、资金流向、分析师共识和关键词次数变化。
 
