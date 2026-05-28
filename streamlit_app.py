@@ -30,6 +30,15 @@ st.set_page_config(page_title="金融市场信息分析助手", layout="centered
 
 st.title("金融市场信息分析助手")
 
+
+def _replace_last_symbol(raw_text: str, symbol: str) -> str:
+    parts = [part.strip() for part in raw_text.split(",")]
+    if not parts:
+        return symbol
+    parts[-1] = symbol
+    return ", ".join(part for part in parts if part)
+
+
 market_label = st.selectbox("市场", list(MARKET_OPTIONS.keys()), index=0)
 market = MARKET_OPTIONS[market_label]
 symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
@@ -37,7 +46,7 @@ suggestions = suggest_tickers(symbols_text.split(",")[-1].strip())
 if suggestions:
     selected_suggestion = st.selectbox("你是不是想搜这个", ["不使用提示"] + suggestions)
     if selected_suggestion != "不使用提示":
-        symbols_text = ticker_from_suggestion(selected_suggestion)
+        symbols_text = _replace_last_symbol(symbols_text, ticker_from_suggestion(selected_suggestion))
 auto_research = st.checkbox("自动搜索公开材料", value=True)
 
 with st.expander("可选：加入 earnings call、meeting、10-K 业务信号分析"):
