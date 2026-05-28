@@ -9,6 +9,7 @@ import yfinance as yf
 from yfinance.exceptions import YFRateLimitError
 
 from data.company_profiles import get_company_profile
+from data.free_api_data import fetch_free_api_data
 from data.ticker_search import COMMON_TICKERS
 
 
@@ -44,6 +45,7 @@ def fetch_stock_snapshot(symbol: str, period: str = "6mo") -> StockSnapshot:
     ticker = yf.Ticker(symbol)
     info = _safe_dict(lambda: ticker.info) or {}
     fast_info = _safe_dict(lambda: dict(ticker.fast_info)) or {}
+    free_api_data = fetch_free_api_data(normalized_symbol)
     profile = get_company_profile(normalized_symbol)
     history = _safe_history(lambda: ticker.history(period=period))
     if history.empty:
@@ -60,27 +62,33 @@ def fetch_stock_snapshot(symbol: str, period: str = "6mo") -> StockSnapshot:
         company_name=(
             info.get("longName")
             or info.get("shortName")
+            or free_api_data.company_name
             or (profile.name if profile else None)
             or COMMON_TICKERS.get(normalized_symbol)
             or normalized_symbol
         ),
-        sector=info.get("sector") or (profile.sector if profile else "Unknown"),
-        industry=info.get("industry") or (profile.industry if profile else "Unknown"),
-        currency=info.get("currency") or fast_info.get("currency") or (profile.currency if profile else "USD"),
+        sector=info.get("sector") or free_api_data.sector or (profile.sector if profile else "Unknown"),
+        industry=info.get("industry") or free_api_data.industry or (profile.industry if profile else "Unknown"),
+        currency=info.get("currency") or fast_info.get("currency") or free_api_data.currency or (profile.currency if profile else "USD"),
         current_price=_safe_float(
             info.get("currentPrice")
             or info.get("regularMarketPrice")
             or fast_info.get("last_price")
             or fast_info.get("lastPrice")
-        ),
-        market_cap=_safe_float(info.get("marketCap") or fast_info.get("market_cap") or fast_info.get("marketCap")),
-        trailing_pe=_safe_float(info.get("trailingPE")),
-        forward_pe=_safe_float(info.get("forwardPE")),
-        revenue_growth=_safe_float(info.get("revenueGrowth")),
-        profit_margins=_safe_float(info.get("profitMargins")),
+        ) or free_api_data.current_price,
+        market_cap=_safe_float(info.get("marketCap") or fast_info.get("market_cap") or fast_info.get("marketCap"))
+        or free_api_data.market_cap,
+        trailing_pe=_safe_float(info.get("trailingPE")) or free_api_data.trailing_pe,
+        forward_pe=_safe_float(info.get("forwardPE")) or free_api_data.forward_pe,
+        revenue_growth=_safe_float(info.get("revenueGrowth")) or free_api_data.revenue_growth,
+        profit_margins=_safe_float(info.get("profitMargins")) or free_api_data.profit_margins,
         history=history,
-        recommendations_summary=recommendations_summary,
-        analyst_price_targets=analyst_price_targets,
+        recommendations_summary=(
+            recommendations_summary
+            if recommendations_summary is not None
+            else free_api_data.recommendations_summary
+        ),
+        analyst_price_targets=analyst_price_targets or free_api_data.analyst_price_targets,
     )
 
 

@@ -18,6 +18,7 @@
 - 自动搜索 Yahoo Finance 新闻摘要和 SEC 最近 10-K / 10-Q
 - 自动生成买前检查清单
 - 自动提取最近季度关键财务表格
+- 可选接入 Financial Modeling Prep、Finnhub、Alpha Vantage 免费 API key，补充市值、PE、收入增长、利润率、分析师目标价等字段
 - 自动保存历史快照，并和上次报告对比
 - 多股票输入时生成股票池 / 行业机会评分排序
 - 输入几个字母时，网页会提示可能想搜索的股票代码
@@ -103,6 +104,14 @@ NVDA, AMD, INTC
 
 网页里可以在“市场”下拉框选择“自动识别 / 美股 / A股 / 港股”。
 
+网页里展开“可选：免费数据源 API key”，可以临时填写：
+
+- `Financial Modeling Prep API key`
+- `Finnhub API key`
+- `Alpha Vantage API key`
+
+这些 key 用来补充免费公开数据源缺失的字段。不同免费 API 的开放字段和额度不同，所以不能保证每次都拿全，但通常会比只用 Yahoo Finance 更完整。
+
 每次生成报告时，程序会在 `reports/history/` 里保存一个历史快照。下次再生成同一只股票报告时，会自动比较机会评分、资金流向、分析师共识和关键词次数变化。
 
 ## 4. 生成公开链接
@@ -123,7 +132,19 @@ export OPENAI_API_KEY="你的 API key"
 
 没有 API key 也可以运行，程序会使用内置的基础报告模板。
 
-## 6. 关于资金流向
+## 6. 可选：接入免费金融数据 API
+
+如果你想让市值、PE、收入增长、利润率、分析师目标价更完整，可以申请免费 API key，然后设置环境变量：
+
+```bash
+export FMP_API_KEY="你的 Financial Modeling Prep key"
+export FINNHUB_API_KEY="你的 Finnhub key"
+export ALPHA_VANTAGE_API_KEY="你的 Alpha Vantage key"
+```
+
+部署到 Streamlit Cloud 时，可以在 `Manage app` 里的 `Secrets` 设置同名 key。也可以先在网页的“可选：免费数据源 API key”里手动填写测试。
+
+## 7. 关于资金流向
 
 当前版本使用公开价格和成交量做估算：
 

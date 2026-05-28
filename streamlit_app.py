@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+
 import pandas as pd
 import streamlit as st
 
@@ -79,6 +81,12 @@ def _build_document_only_report(symbol: str, reason: str) -> tuple[str, str]:
     return report, str(output_path)
 
 
+def _set_optional_api_key(env_name: str, value: str) -> None:
+    clean_value = value.strip()
+    if clean_value:
+        os.environ[env_name] = clean_value
+
+
 market_label = st.selectbox("市场", list(MARKET_OPTIONS.keys()), index=0)
 market = MARKET_OPTIONS[market_label]
 symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
@@ -88,6 +96,14 @@ if suggestions:
     if selected_suggestion != "不使用提示":
         symbols_text = _replace_last_symbol(symbols_text, ticker_from_suggestion(selected_suggestion))
 auto_research = st.checkbox("自动搜索公开材料", value=True)
+
+with st.expander("可选：免费数据源 API key"):
+    fmp_api_key = st.text_input("Financial Modeling Prep API key", type="password")
+    finnhub_api_key = st.text_input("Finnhub API key", type="password")
+    alpha_vantage_api_key = st.text_input("Alpha Vantage API key", type="password")
+    _set_optional_api_key("FMP_API_KEY", fmp_api_key)
+    _set_optional_api_key("FINNHUB_API_KEY", finnhub_api_key)
+    _set_optional_api_key("ALPHA_VANTAGE_API_KEY", alpha_vantage_api_key)
 
 with st.expander("可选：加入 earnings call、meeting、10-K 业务信号分析"):
     earnings_call_text = st.text_area("最近 earnings call 摘要或文字", height=120)
