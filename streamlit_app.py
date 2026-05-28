@@ -12,6 +12,7 @@ from analysis.business_signals import (
 )
 from analysis.stock_summary import comparison_row, summarize_stock
 from app import build_comparison_report, parse_symbols, save_report
+from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
 
 
@@ -20,6 +21,7 @@ st.set_page_config(page_title="金融市场信息分析助手", layout="centered
 st.title("金融市场信息分析助手")
 
 symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
+auto_research = st.checkbox("自动搜索公开材料", value=True)
 
 with st.expander("可选：加入 earnings call、meeting、10-K 业务信号分析"):
     earnings_call_text = st.text_area("最近 earnings call 摘要或文字", height=120)
@@ -39,19 +41,26 @@ if st.button("生成分析报告", type="primary"):
         with st.spinner("正在读取数据并生成报告..."):
             reports = []
             comparison_rows = []
-            business_signal_summary = analyze_business_signals(
-                [
-                    SourceDocument("earnings_call", earnings_call_text),
-                    SourceDocument("meeting", meeting_text),
-                    SourceDocument("tenk", tenk_text),
-                ],
-                parse_keywords(keywords_text),
-            )
-            business_signal_section = format_business_signal_report(business_signal_summary)
             for symbol in symbols:
                 snapshot = fetch_stock_snapshot(symbol)
                 summary = summarize_stock(snapshot)
                 report = build_report(summary)
+                documents = [
+                    SourceDocument("earnings_call", earnings_call_text),
+                    SourceDocument("meeting", meeting_text),
+                    SourceDocument("tenk", tenk_text),
+                ]
+                notes = []
+                if auto_research:
+                    public_result = fetch_public_documents(symbol, summary.company_name)
+                    documents.extend(public_result.documents)
+                    notes.extend(public_result.notes)
+                business_signal_summary = analyze_business_signals(
+                    documents,
+                    parse_keywords(keywords_text),
+                    notes,
+                )
+                business_signal_section = format_business_signal_report(business_signal_summary)
                 if business_signal_section:
                     report += "\n" + business_signal_section
                 output_path = save_report(symbol, report)

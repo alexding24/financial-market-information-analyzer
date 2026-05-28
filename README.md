@@ -14,6 +14,7 @@
 - 查看分析师共识评级、覆盖数量和平均目标价
 - 根据 earnings call、meeting、10-K 文本分析公司未来动向
 - 统计业务关键词在重要场合被提到的次数
+- 自动搜索 Yahoo Finance 新闻摘要和 SEC 最近 10-K / 10-Q
 - 可用命令行运行，也可以用网页界面运行
 
 ## 1. 安装依赖
@@ -56,6 +57,12 @@ python app.py NVDA \
   --keywords "AI,data center,cloud,GPU,demand,margin,capex"
 ```
 
+也可以让程序自动搜索公开材料：
+
+```bash
+python app.py NVDA --auto-research
+```
+
 ## 3. 网页界面运行
 
 ```bash
@@ -71,6 +78,8 @@ NVDA, AMD, INTC
 ```
 
 网页里展开“可选：加入 earnings call、meeting、10-K 业务信号分析”，可以直接粘贴文字或简短总结。
+
+网页里的“自动搜索公开材料”默认打开，会自动读取 Yahoo Finance 新闻摘要和 SEC 最近 10-K / 10-Q。免费公开数据不一定包含完整 earnings call transcript；如果你有更完整的 transcript，仍然可以粘贴进去补充。
 
 ## 4. 可选：接入 OpenAI
 

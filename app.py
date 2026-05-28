@@ -12,6 +12,7 @@ from analysis.business_signals import (
     parse_keywords,
 )
 from analysis.stock_summary import comparison_row, summarize_stock
+from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
 
 
@@ -66,17 +67,26 @@ def _read_optional_file(path: str | None) -> str:
 
 
 def build_business_signal_section(
+    symbol: str | None,
+    company_name: str | None,
     earnings_call_file: str | None,
     meeting_file: str | None,
     tenk_file: str | None,
     raw_keywords: str | None,
+    auto_research: bool = False,
 ) -> str:
     documents = [
         SourceDocument("earnings_call", _read_optional_file(earnings_call_file)),
         SourceDocument("meeting", _read_optional_file(meeting_file)),
         SourceDocument("tenk", _read_optional_file(tenk_file)),
     ]
-    signal_summary = analyze_business_signals(documents, parse_keywords(raw_keywords))
+    notes: list[str] = []
+    if auto_research and symbol:
+        public_result = fetch_public_documents(symbol, company_name)
+        documents.extend(public_result.documents)
+        notes.extend(public_result.notes)
+
+    signal_summary = analyze_business_signals(documents, parse_keywords(raw_keywords), notes)
     return format_business_signal_report(signal_summary)
 
 
@@ -87,6 +97,7 @@ def main() -> None:
     parser.add_argument("--meeting-file", help="Text file with recent meeting notes")
     parser.add_argument("--tenk-file", help="Text file with recent 10-K notes or text")
     parser.add_argument("--keywords", help="Comma-separated keywords to count")
+    parser.add_argument("--auto-research", action="store_true", help="Automatically fetch public news and SEC filings")
     args = parser.parse_args()
 
     symbols = parse_symbols(args.symbols)
@@ -94,16 +105,19 @@ def main() -> None:
         raise ValueError("请至少输入一个股票代码。")
 
     comparison_rows = []
-    business_signal_section = build_business_signal_section(
-        args.earnings_call_file,
-        args.meeting_file,
-        args.tenk_file,
-        args.keywords,
-    )
     for symbol in symbols:
         snapshot = fetch_stock_snapshot(symbol)
         summary = summarize_stock(snapshot)
         report = build_report(summary)
+        business_signal_section = build_business_signal_section(
+            symbol,
+            summary.company_name,
+            args.earnings_call_file,
+            args.meeting_file,
+            args.tenk_file,
+            args.keywords,
+            args.auto_research,
+        )
         if business_signal_section:
             report += "\n" + business_signal_section
         output_path = save_report(symbol, report)

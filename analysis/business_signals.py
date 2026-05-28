@@ -24,12 +24,30 @@ DEFAULT_KEYWORDS = [
 SOURCE_LABELS = {
     "earnings_call": "Earnings call",
     "meeting": "Meeting",
-    "tenk": "10-K",
+    "tenk": "10-K / 10-Q",
+    "news": "News",
 }
 
 FUTURE_SIGNAL_PATTERNS = [
     r"[^.!?\n]*(?:expect|expects|expected|forecast|guidance|outlook|plan|plans|planned|invest|investment|expand|growth|demand|opportunity|risk|margin|capacity|launch|roadmap)[^.!?\n]*[.!?]?",
     r"[^。！？\n]*(?:预计|展望|指引|计划|投资|扩张|增长|需求|机会|风险|利润率|产能|推出|路线图|未来)[^。！？\n]*[。！？]?",
+]
+
+BOILERPLATE_PHRASES = [
+    "accelerated filer",
+    "check mark",
+    "smaller reporting company",
+    "emerging growth company",
+    "rule 12b-2",
+    "forward-looking statements",
+    "known and unknown risks",
+    "table of contents",
+    "quantitative and qualitative",
+    "risk factors",
+    "inherently uncertain",
+    "cautionary statements",
+    "purchase, hold, or sell",
+    "financial condition and results",
 ]
 
 
@@ -49,6 +67,7 @@ class KeywordMention:
     earnings_call: int
     meeting: int
     tenk: int
+    news: int
     total: int
 
 
@@ -57,6 +76,7 @@ class BusinessSignalSummary:
     future_direction: str
     keyword_mentions: list[KeywordMention]
     source_count: int
+    notes: list[str]
 
 
 def parse_keywords(raw_keywords: str | None) -> list[str]:
@@ -86,7 +106,8 @@ def _extract_signal_sentences(documents: list[SourceDocument], max_sentences: in
         for pattern in FUTURE_SIGNAL_PATTERNS:
             for match in re.findall(pattern, text, flags=re.IGNORECASE):
                 sentence = match.strip()
-                if sentence and sentence not in sentences:
+                lowered = sentence.lower()
+                if sentence and sentence not in sentences and not any(phrase in lowered for phrase in BOILERPLATE_PHRASES):
                     sentences.append(f"{document.label}: {sentence}")
                 if len(sentences) >= max_sentences:
                     return sentences
@@ -96,6 +117,7 @@ def _extract_signal_sentences(documents: list[SourceDocument], max_sentences: in
 def analyze_business_signals(
     documents: list[SourceDocument],
     keywords: list[str] | None = None,
+    notes: list[str] | None = None,
 ) -> BusinessSignalSummary | None:
     clean_documents = [document for document in documents if document.text.strip()]
     if not clean_documents:
@@ -119,7 +141,12 @@ def analyze_business_signals(
             for document in clean_documents
             if document.source_type == "tenk"
         )
-        total = earnings_call + meeting + tenk
+        news = sum(
+            _count_keyword(document.text, keyword)
+            for document in clean_documents
+            if document.source_type == "news"
+        )
+        total = earnings_call + meeting + tenk + news
         if total:
             mentions.append(
                 KeywordMention(
@@ -127,6 +154,7 @@ def analyze_business_signals(
                     earnings_call=earnings_call,
                     meeting=meeting,
                     tenk=tenk,
+                    news=news,
                     total=total,
                 )
             )
@@ -142,6 +170,7 @@ def analyze_business_signals(
         future_direction=future_direction,
         keyword_mentions=mentions,
         source_count=len(clean_documents),
+        notes=notes or [],
     )
 
 
@@ -149,21 +178,26 @@ def format_business_signal_report(summary: BusinessSignalSummary | None) -> str:
     if summary is None:
         return ""
 
-    keyword_table = "| 关键词 | Earnings call | Meeting | 10-K | 合计 |\n"
-    keyword_table += "| --- | ---: | ---: | ---: | ---: |\n"
+    keyword_table = "| 关键词 | Earnings call | Meeting | 10-K / 10-Q | News | 合计 |\n"
+    keyword_table += "| --- | ---: | ---: | ---: | ---: | ---: |\n"
     if summary.keyword_mentions:
         for mention in summary.keyword_mentions:
             keyword_table += (
                 f"| {mention.keyword} | {mention.earnings_call} | {mention.meeting} | "
-                f"{mention.tenk} | {mention.total} |\n"
+                f"{mention.tenk} | {mention.news} | {mention.total} |\n"
             )
     else:
-        keyword_table += "| 暂无命中 | 0 | 0 | 0 | 0 |\n"
+        keyword_table += "| 暂无命中 | 0 | 0 | 0 | 0 | 0 |\n"
+
+    notes_text = ""
+    if summary.notes:
+        notes_text = "\n".join(f"- {note}" for note in summary.notes) + "\n"
 
     return f"""## 业务动向和关键词信号
 
 已分析重要场合数量：{summary.source_count}
 
+{notes_text}
 ### 未来动向线索
 
 {summary.future_direction}
