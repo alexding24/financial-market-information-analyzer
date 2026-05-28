@@ -1,0 +1,8 @@
+# 股票对比报告
+
+| 股票代码 | 公司名称 | 行业板块 | 细分行业 | 近六个月涨跌幅 | 收入增长 | 利润率 | 未来市盈率 | 风险 |
+| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- |
+| NVDA | NVIDIA Corporation | Technology | Semiconductors | 20.4% | 85.2% | 63.0% | 16.9 | 较低 |
+| AMD | Advanced Micro Devices, Inc. | Technology | Semiconductors | 129.9% | 37.8% | 13.4% | 38.6 | 中等 |
+
+> 这份报告是学习和研究用途，不构成投资建议。

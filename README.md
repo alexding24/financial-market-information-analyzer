@@ -5,9 +5,11 @@
 第一版功能：
 
 - 输入股票代码，例如 `AAPL`、`NVDA`、`TSLA`
+- 支持一次输入多个股票代码，例如 `NVDA, AMD, INTC`
 - 自动获取公司基本信息和最近股价
 - 计算简单指标
 - 生成中文分析报告
+- 生成多只股票的对比表
 - 可用命令行运行，也可以用网页界面运行
 
 ## 1. 安装依赖
@@ -26,6 +28,18 @@ pip install -r requirements.txt
 python app.py NVDA
 ```
 
+也可以一次分析多个股票：
+
+```bash
+python app.py NVDA AMD INTC
+```
+
+或者：
+
+```bash
+python app.py NVDA,AMD,INTC
+```
+
 报告会显示在屏幕上，也会保存到 `reports/` 文件夹。
 
 ## 3. 网页界面运行
@@ -35,6 +49,12 @@ streamlit run streamlit_app.py
 ```
 
 然后浏览器会打开一个页面，你可以输入股票代码生成报告。
+
+网页里也可以输入多个股票代码：
+
+```text
+NVDA, AMD, INTC
+```
 
 ## 4. 可选：接入 OpenAI
 

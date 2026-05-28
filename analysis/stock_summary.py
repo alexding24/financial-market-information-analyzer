@@ -108,3 +108,21 @@ def format_summary_value(summary: StockSummary) -> dict[str, str]:
         "近期趋势": summary.recent_trend,
         "基础风险等级": summary.risk_level,
     }
+
+
+def comparison_row(summary: StockSummary) -> dict[str, str | float | None]:
+    return {
+        "股票代码": summary.symbol,
+        "公司名称": summary.company_name,
+        "行业板块": summary.sector,
+        "细分行业": summary.industry,
+        "当前价格": None if summary.current_price is None else round(summary.current_price, 2),
+        "市值": summary.market_cap,
+        "过去市盈率": summary.trailing_pe,
+        "未来市盈率": summary.forward_pe,
+        "收入增长": None if summary.revenue_growth is None else summary.revenue_growth,
+        "利润率": None if summary.profit_margins is None else summary.profit_margins,
+        "近六个月涨跌幅": summary.six_month_return,
+        "近期趋势": summary.recent_trend,
+        "基础风险等级": summary.risk_level,
+    }

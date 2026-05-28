@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import pandas as pd
 import streamlit as st
 
 from analysis.ai_report import build_report
-from analysis.stock_summary import summarize_stock
-from app import save_report
+from analysis.stock_summary import comparison_row, summarize_stock
+from app import build_comparison_report, parse_symbols, save_report
 from data.stock_data import fetch_stock_snapshot
 
 
@@ -12,18 +13,46 @@ st.set_page_config(page_title="金融市场信息分析助手", layout="centered
 
 st.title("金融市场信息分析助手")
 
-symbol = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
+symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
 
 if st.button("生成分析报告", type="primary"):
-    clean_symbol = symbol.upper().strip()
-    if not clean_symbol:
-        st.warning("请先输入一个股票代码。")
+    symbols = parse_symbols([symbols_text])
+    if not symbols:
+        st.warning("请先输入至少一个股票代码。")
     else:
         with st.spinner("正在读取数据并生成报告..."):
-            snapshot = fetch_stock_snapshot(clean_symbol)
-            summary = summarize_stock(snapshot)
-            report = build_report(summary)
-            output_path = save_report(clean_symbol, report)
+            reports = []
+            comparison_rows = []
+            for symbol in symbols:
+                snapshot = fetch_stock_snapshot(symbol)
+                summary = summarize_stock(snapshot)
+                report = build_report(summary)
+                output_path = save_report(symbol, report)
+                reports.append((symbol, report, output_path))
+                comparison_rows.append(comparison_row(summary))
 
-        st.success(f"报告已生成：{output_path}")
-        st.markdown(report)
+            if len(comparison_rows) > 1:
+                comparison_report = build_comparison_report(comparison_rows)
+                save_report("comparison", comparison_report)
+
+        st.success("报告已生成。")
+
+        if len(comparison_rows) > 1:
+            st.subheader("股票对比")
+            comparison_df = pd.DataFrame(comparison_rows)
+            st.dataframe(
+                comparison_df,
+                hide_index=True,
+                column_config={
+                    "市值": st.column_config.NumberColumn("市值", format="compact"),
+                    "收入增长": st.column_config.NumberColumn("收入增长", format="percent"),
+                    "利润率": st.column_config.NumberColumn("利润率", format="percent"),
+                    "近六个月涨跌幅": st.column_config.NumberColumn("近六个月涨跌幅", format="percent"),
+                    "过去市盈率": st.column_config.NumberColumn("过去市盈率", format="%.1f"),
+                    "未来市盈率": st.column_config.NumberColumn("未来市盈率", format="%.1f"),
+                },
+            )
+
+        for symbol, report, output_path in reports:
+            st.caption(f"{symbol} 报告已保存：{output_path}")
+            st.markdown(report)
