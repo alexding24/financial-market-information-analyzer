@@ -24,6 +24,7 @@ from data.financial_tables import fetch_financial_metrics, format_financial_metr
 from data.market_symbols import normalize_symbol
 from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
+from data.ticker_search import best_ticker_match
 
 
 def save_report(symbol: str, report: str) -> Path:
@@ -38,7 +39,8 @@ def parse_symbols(raw_symbols: list[str], market: str = "auto") -> list[str]:
     symbols: list[str] = []
     for raw_symbol in raw_symbols:
         for part in re.split(r"[\s,]+", raw_symbol):
-            symbol = normalize_symbol(part, market)
+            raw_part = part.strip()
+            symbol = best_ticker_match(raw_part) or normalize_symbol(raw_part, market)
             if symbol and symbol not in symbols:
                 symbols.append(symbol)
     return symbols

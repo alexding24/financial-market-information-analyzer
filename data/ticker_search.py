@@ -99,5 +99,12 @@ def suggest_tickers(query: str, limit: int = 8) -> list[str]:
     return [f"{ticker} - {COMMON_TICKERS[ticker]}" for _, ticker in matches[:limit]]
 
 
+def best_ticker_match(query: str) -> str | None:
+    suggestions = suggest_tickers(query, limit=1)
+    if not suggestions:
+        return None
+    return ticker_from_suggestion(suggestions[0])
+
+
 def ticker_from_suggestion(value: str) -> str:
     return value.split(" - ", 1)[0].strip().upper()

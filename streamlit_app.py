@@ -24,6 +24,7 @@ from data.market_symbols import MARKET_OPTIONS
 from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
 from data.ticker_search import suggest_tickers, ticker_from_suggestion
+from yfinance.exceptions import YFRateLimitError
 
 
 st.set_page_config(page_title="金融市场信息分析助手", layout="centered")
@@ -64,44 +65,54 @@ if st.button("生成分析报告", type="primary"):
     if not symbols:
         st.warning("请先输入至少一个股票代码。")
     else:
-        with st.spinner("正在读取数据并生成报告..."):
-            reports = []
-            comparison_rows = []
-            for symbol in symbols:
-                snapshot = fetch_stock_snapshot(symbol)
-                summary = summarize_stock(snapshot)
-                report = build_report(summary)
-                documents = [
-                    SourceDocument("earnings_call", earnings_call_text),
-                    SourceDocument("meeting", meeting_text),
-                    SourceDocument("tenk", tenk_text),
-                ]
-                notes = []
-                if auto_research:
-                    public_result = fetch_public_documents(symbol, summary.company_name)
-                    documents.extend(public_result.documents)
-                    notes.extend(public_result.notes)
-                business_signal_summary = analyze_business_signals(
-                    documents,
-                    parse_keywords(keywords_text),
-                    notes,
-                )
-                previous_snapshot = load_last_snapshot(symbol)
-                report += "\n" + format_buy_checklist(summary)
-                report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol))
-                report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary)
-                business_signal_section = format_business_signal_report(business_signal_summary)
-                if business_signal_section:
-                    report += "\n" + business_signal_section
-                output_path = save_report(symbol, report)
-                save_snapshot(summary, business_signal_summary)
-                reports.append((symbol, report, output_path))
-                comparison_rows.append(comparison_row(summary))
+        try:
+            with st.spinner("正在读取数据并生成报告..."):
+                reports = []
+                comparison_rows = []
+                for symbol in symbols:
+                    snapshot = fetch_stock_snapshot(symbol)
+                    summary = summarize_stock(snapshot)
+                    report = build_report(summary)
+                    documents = [
+                        SourceDocument("earnings_call", earnings_call_text),
+                        SourceDocument("meeting", meeting_text),
+                        SourceDocument("tenk", tenk_text),
+                    ]
+                    notes = []
+                    if auto_research:
+                        public_result = fetch_public_documents(symbol, summary.company_name)
+                        documents.extend(public_result.documents)
+                        notes.extend(public_result.notes)
+                    business_signal_summary = analyze_business_signals(
+                        documents,
+                        parse_keywords(keywords_text),
+                        notes,
+                    )
+                    previous_snapshot = load_last_snapshot(symbol)
+                    report += "\n" + format_buy_checklist(summary)
+                    report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol))
+                    report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary)
+                    business_signal_section = format_business_signal_report(business_signal_summary)
+                    if business_signal_section:
+                        report += "\n" + business_signal_section
+                    output_path = save_report(symbol, report)
+                    save_snapshot(summary, business_signal_summary)
+                    reports.append((symbol, report, output_path))
+                    comparison_rows.append(comparison_row(summary))
 
-            if len(comparison_rows) > 1:
-                comparison_report = build_comparison_report(comparison_rows)
-                comparison_report += "\n" + format_industry_ranking(comparison_rows)
-                save_report("comparison", comparison_report)
+                if len(comparison_rows) > 1:
+                    comparison_report = build_comparison_report(comparison_rows)
+                    comparison_report += "\n" + format_industry_ranking(comparison_rows)
+                    save_report("comparison", comparison_report)
+        except YFRateLimitError:
+            st.error("公开行情数据源暂时限流了。请等几分钟再试，或者先关闭“自动搜索公开材料”后重试。")
+            st.stop()
+        except ValueError as exc:
+            st.error(str(exc))
+            st.stop()
+        except Exception as exc:
+            st.error(f"生成报告时遇到问题：{exc}")
+            st.stop()
 
         st.success("报告已生成。")
 
