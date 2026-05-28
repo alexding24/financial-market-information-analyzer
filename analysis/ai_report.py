@@ -17,6 +17,15 @@ def _fallback_report(summary: StockSummary) -> str:
     metrics = "\n".join(f"- **{key}**：{value}" for key, value in values.items())
     capital_flow_table = format_capital_flow_table(summary)
     analyst_summary = format_analyst_summary(summary)
+    missing_fields = [key for key, value in values.items() if value in {"暂无数据", "暂无评级数据", "Unknown"}]
+    data_quality = ""
+    if missing_fields:
+        data_quality = (
+            "\n## 数据完整度提醒\n\n"
+            f"本次以下字段没有从公开免费数据源稳定读到：{', '.join(missing_fields)}。\n\n"
+            "常见原因是 Yahoo Finance / 免费行情源限流、该市场不公开该字段，或分析师评级需要更专业的数据源。"
+            "这些字段为空时，报告会更依赖价格走势、成交量估算和公开材料关键词。"
+        )
 
     opportunity = "值得继续观察"
     if summary.recent_trend == "偏强" and summary.revenue_growth is not None and summary.revenue_growth > 0:
@@ -35,6 +44,7 @@ def _fallback_report(summary: StockSummary) -> str:
 {summary.company_name} 属于 {summary.sector} 板块，细分行业是 {summary.industry}。从最近六个月股价表现看，走势为 **{summary.recent_trend}**，基础风险等级为 **{summary.risk_level}**。
 
 整体来看，这只股票目前 **{opportunity}**。资金流向估算显示 **{summary.capital_flow.signal}**，分析师共识为 **{summary.analyst.consensus}**。
+{data_quality}
 
 ## 资金流向估算
 
