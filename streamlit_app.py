@@ -10,10 +10,19 @@ from analysis.business_signals import (
     format_business_signal_report,
     parse_keywords,
 )
+from analysis.research_features import (
+    format_buy_checklist,
+    format_history_comparison,
+    format_industry_ranking,
+    load_last_snapshot,
+    save_snapshot,
+)
 from analysis.stock_summary import comparison_row, summarize_stock
 from app import build_comparison_report, parse_symbols, save_report
+from data.financial_tables import fetch_financial_metrics, format_financial_metrics
 from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
+from data.ticker_search import suggest_tickers, ticker_from_suggestion
 
 
 st.set_page_config(page_title="金融市场信息分析助手", layout="centered")
@@ -21,6 +30,11 @@ st.set_page_config(page_title="金融市场信息分析助手", layout="centered
 st.title("金融市场信息分析助手")
 
 symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
+suggestions = suggest_tickers(symbols_text.split(",")[-1].strip())
+if suggestions:
+    selected_suggestion = st.selectbox("你是不是想搜这个", ["不使用提示"] + suggestions)
+    if selected_suggestion != "不使用提示":
+        symbols_text = ticker_from_suggestion(selected_suggestion)
 auto_research = st.checkbox("自动搜索公开材料", value=True)
 
 with st.expander("可选：加入 earnings call、meeting、10-K 业务信号分析"):
@@ -60,15 +74,21 @@ if st.button("生成分析报告", type="primary"):
                     parse_keywords(keywords_text),
                     notes,
                 )
+                previous_snapshot = load_last_snapshot(symbol)
+                report += "\n" + format_buy_checklist(summary)
+                report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol))
+                report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary)
                 business_signal_section = format_business_signal_report(business_signal_summary)
                 if business_signal_section:
                     report += "\n" + business_signal_section
                 output_path = save_report(symbol, report)
+                save_snapshot(summary, business_signal_summary)
                 reports.append((symbol, report, output_path))
                 comparison_rows.append(comparison_row(summary))
 
             if len(comparison_rows) > 1:
                 comparison_report = build_comparison_report(comparison_rows)
+                comparison_report += "\n" + format_industry_ranking(comparison_rows)
                 save_report("comparison", comparison_report)
 
         st.success("报告已生成。")
@@ -89,6 +109,9 @@ if st.button("生成分析报告", type="primary"):
                     "目标价空间": st.column_config.NumberColumn("目标价空间", format="percent"),
                 },
             )
+            ranking = format_industry_ranking(comparison_rows)
+            if ranking:
+                st.markdown(ranking)
 
         for symbol, report, output_path in reports:
             st.caption(f"{symbol} 报告已保存：{output_path}")

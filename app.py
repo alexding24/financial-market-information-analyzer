@@ -6,12 +6,21 @@ from pathlib import Path
 
 from analysis.ai_report import build_report
 from analysis.business_signals import (
+    BusinessSignalSummary,
     SourceDocument,
     analyze_business_signals,
     format_business_signal_report,
     parse_keywords,
 )
+from analysis.research_features import (
+    format_buy_checklist,
+    format_history_comparison,
+    format_industry_ranking,
+    load_last_snapshot,
+    save_snapshot,
+)
 from analysis.stock_summary import comparison_row, summarize_stock
+from data.financial_tables import fetch_financial_metrics, format_financial_metrics
 from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
 
@@ -66,7 +75,7 @@ def _read_optional_file(path: str | None) -> str:
     return Path(path).read_text(encoding="utf-8")
 
 
-def build_business_signal_section(
+def build_business_signal_summary(
     symbol: str | None,
     company_name: str | None,
     earnings_call_file: str | None,
@@ -86,7 +95,27 @@ def build_business_signal_section(
         documents.extend(public_result.documents)
         notes.extend(public_result.notes)
 
-    signal_summary = analyze_business_signals(documents, parse_keywords(raw_keywords), notes)
+    return analyze_business_signals(documents, parse_keywords(raw_keywords), notes)
+
+
+def build_business_signal_section(
+    symbol: str | None,
+    company_name: str | None,
+    earnings_call_file: str | None,
+    meeting_file: str | None,
+    tenk_file: str | None,
+    raw_keywords: str | None,
+    auto_research: bool = False,
+) -> str:
+    signal_summary = build_business_signal_summary(
+        symbol,
+        company_name,
+        earnings_call_file,
+        meeting_file,
+        tenk_file,
+        raw_keywords,
+        auto_research,
+    )
     return format_business_signal_report(signal_summary)
 
 
@@ -109,7 +138,7 @@ def main() -> None:
         snapshot = fetch_stock_snapshot(symbol)
         summary = summarize_stock(snapshot)
         report = build_report(summary)
-        business_signal_section = build_business_signal_section(
+        business_signal_summary = build_business_signal_summary(
             symbol,
             summary.company_name,
             args.earnings_call_file,
@@ -118,9 +147,15 @@ def main() -> None:
             args.keywords,
             args.auto_research,
         )
+        previous_snapshot = load_last_snapshot(symbol)
+        report += "\n" + format_buy_checklist(summary)
+        report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol))
+        report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary)
+        business_signal_section = format_business_signal_report(business_signal_summary)
         if business_signal_section:
             report += "\n" + business_signal_section
         output_path = save_report(symbol, report)
+        save_snapshot(summary, business_signal_summary)
         comparison_rows.append(comparison_row(summary))
 
         print(report)
@@ -128,6 +163,7 @@ def main() -> None:
 
     if len(comparison_rows) > 1:
         comparison_report = build_comparison_report(comparison_rows)
+        comparison_report += "\n" + format_industry_ranking(comparison_rows)
         comparison_path = save_report("comparison", comparison_report)
         print(comparison_report)
         print(f"\nComparison report saved to: {comparison_path}")
