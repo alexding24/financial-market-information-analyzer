@@ -5,6 +5,12 @@ import re
 from pathlib import Path
 
 from analysis.ai_report import build_report
+from analysis.business_signals import (
+    SourceDocument,
+    analyze_business_signals,
+    format_business_signal_report,
+    parse_keywords,
+)
 from analysis.stock_summary import comparison_row, summarize_stock
 from data.stock_data import fetch_stock_snapshot
 
@@ -53,9 +59,34 @@ def build_comparison_report(rows: list[dict[str, str | float | None]]) -> str:
     return "# 股票对比报告\n\n" + header + divider + body + "\n> 这份报告是学习和研究用途，不构成投资建议。\n"
 
 
+def _read_optional_file(path: str | None) -> str:
+    if not path:
+        return ""
+    return Path(path).read_text(encoding="utf-8")
+
+
+def build_business_signal_section(
+    earnings_call_file: str | None,
+    meeting_file: str | None,
+    tenk_file: str | None,
+    raw_keywords: str | None,
+) -> str:
+    documents = [
+        SourceDocument("earnings_call", _read_optional_file(earnings_call_file)),
+        SourceDocument("meeting", _read_optional_file(meeting_file)),
+        SourceDocument("tenk", _read_optional_file(tenk_file)),
+    ]
+    signal_summary = analyze_business_signals(documents, parse_keywords(raw_keywords))
+    return format_business_signal_report(signal_summary)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate a simple Chinese stock analysis report.")
     parser.add_argument("symbols", nargs="+", help="Stock tickers, for example AAPL NVDA TSLA or AAPL,NVDA,TSLA")
+    parser.add_argument("--earnings-call-file", help="Text file with recent earnings call notes or transcript")
+    parser.add_argument("--meeting-file", help="Text file with recent meeting notes")
+    parser.add_argument("--tenk-file", help="Text file with recent 10-K notes or text")
+    parser.add_argument("--keywords", help="Comma-separated keywords to count")
     args = parser.parse_args()
 
     symbols = parse_symbols(args.symbols)
@@ -63,10 +94,18 @@ def main() -> None:
         raise ValueError("请至少输入一个股票代码。")
 
     comparison_rows = []
+    business_signal_section = build_business_signal_section(
+        args.earnings_call_file,
+        args.meeting_file,
+        args.tenk_file,
+        args.keywords,
+    )
     for symbol in symbols:
         snapshot = fetch_stock_snapshot(symbol)
         summary = summarize_stock(snapshot)
         report = build_report(summary)
+        if business_signal_section:
+            report += "\n" + business_signal_section
         output_path = save_report(symbol, report)
         comparison_rows.append(comparison_row(summary))
 

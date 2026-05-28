@@ -12,6 +12,8 @@
 - 生成多只股票的对比表
 - 查看近 1 个月、3 个月、6 个月资金流向估算
 - 查看分析师共识评级、覆盖数量和平均目标价
+- 根据 earnings call、meeting、10-K 文本分析公司未来动向
+- 统计业务关键词在重要场合被提到的次数
 - 可用命令行运行，也可以用网页界面运行
 
 ## 1. 安装依赖
@@ -44,6 +46,16 @@ python app.py NVDA,AMD,INTC
 
 报告会显示在屏幕上，也会保存到 `reports/` 文件夹。
 
+如果你有 earnings call、meeting、10-K 的文字或摘要，也可以一起分析：
+
+```bash
+python app.py NVDA \
+  --earnings-call-file data_inputs/nvda_earnings_call.txt \
+  --meeting-file data_inputs/nvda_meeting.txt \
+  --tenk-file data_inputs/nvda_10k.txt \
+  --keywords "AI,data center,cloud,GPU,demand,margin,capex"
+```
+
 ## 3. 网页界面运行
 
 ```bash
@@ -57,6 +69,8 @@ streamlit run streamlit_app.py
 ```text
 NVDA, AMD, INTC
 ```
+
+网页里展开“可选：加入 earnings call、meeting、10-K 业务信号分析”，可以直接粘贴文字或简短总结。
 
 ## 4. 可选：接入 OpenAI
 
