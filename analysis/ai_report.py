@@ -4,12 +4,19 @@ import os
 
 from openai import OpenAI
 
-from analysis.stock_summary import StockSummary, format_summary_value
+from analysis.stock_summary import (
+    StockSummary,
+    format_analyst_summary,
+    format_capital_flow_table,
+    format_summary_value,
+)
 
 
 def _fallback_report(summary: StockSummary) -> str:
     values = format_summary_value(summary)
     metrics = "\n".join(f"- **{key}**：{value}" for key, value in values.items())
+    capital_flow_table = format_capital_flow_table(summary)
+    analyst_summary = format_analyst_summary(summary)
 
     opportunity = "值得继续观察"
     if summary.recent_trend == "偏强" and summary.revenue_growth is not None and summary.revenue_growth > 0:
@@ -27,7 +34,17 @@ def _fallback_report(summary: StockSummary) -> str:
 
 {summary.company_name} 属于 {summary.sector} 板块，细分行业是 {summary.industry}。从最近六个月股价表现看，走势为 **{summary.recent_trend}**，基础风险等级为 **{summary.risk_level}**。
 
-整体来看，这只股票目前 **{opportunity}**。不过，这只是第一版自动分析，主要依赖公开股价和基础财务指标，还没有加入财报原文、电话会和行业关键词趋势。
+整体来看，这只股票目前 **{opportunity}**。资金流向估算显示 **{summary.capital_flow.signal}**，分析师共识为 **{summary.analyst.consensus}**。
+
+## 资金流向估算
+
+{capital_flow_table}
+
+说明：这里的“大额成交日”是用成交量明显高于近 20 日平均成交量的交易日近似估算，不等于真实逐笔大单数据。
+
+## 分析师评价
+
+{analyst_summary}
 
 ## 下一步需要补充
 
@@ -43,17 +60,26 @@ def _fallback_report(summary: StockSummary) -> str:
 def _build_prompt(summary: StockSummary) -> str:
     values = format_summary_value(summary)
     metrics = "\n".join(f"{key}: {value}" for key, value in values.items())
+    capital_flow_table = format_capital_flow_table(summary)
+    analyst_summary = format_analyst_summary(summary)
     return f"""请根据以下股票基础数据，写一份中文股票分析报告。
 
 要求：
 - 语言清楚，适合金融初学者阅读
 - 不要承诺未来收益
 - 明确说明这不是投资建议
-- 包含：公司概况、股价趋势、估值和增长、主要风险、下一步应该看什么
+- 包含：公司概况、股价趋势、估值和增长、资金流向估算、分析师评价、主要风险、下一步应该看什么
 - 不要编造没有给出的数据
+- 说明资金流向是用价格和成交量估算，不是真实逐笔大单数据
 
 数据：
 {metrics}
+
+资金流向估算：
+{capital_flow_table}
+
+分析师评价：
+{analyst_summary}
 """
 
 

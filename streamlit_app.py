@@ -50,6 +50,7 @@ if st.button("生成分析报告", type="primary"):
                     "近六个月涨跌幅": st.column_config.NumberColumn("近六个月涨跌幅", format="percent"),
                     "过去市盈率": st.column_config.NumberColumn("过去市盈率", format="%.1f"),
                     "未来市盈率": st.column_config.NumberColumn("未来市盈率", format="%.1f"),
+                    "目标价空间": st.column_config.NumberColumn("目标价空间", format="percent"),
                 },
             )
 
