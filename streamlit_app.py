@@ -87,6 +87,10 @@ def _set_optional_api_key(env_name: str, value: str) -> None:
         os.environ[env_name] = clean_value
 
 
+def _set_optional_env(env_name: str, value: str) -> None:
+    os.environ[env_name] = value.strip()
+
+
 market_label = st.selectbox("市场", list(MARKET_OPTIONS.keys()), index=0)
 market = MARKET_OPTIONS[market_label]
 symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
@@ -98,12 +102,37 @@ if suggestions:
 auto_research = st.checkbox("自动搜索公开材料", value=True)
 
 with st.expander("可选：免费数据源 API key"):
+    provider_options = {
+        "Financial Modeling Prep": "fmp",
+        "Finnhub": "finnhub",
+        "Alpha Vantage": "alpha_vantage",
+        "EODHD": "eodhd",
+        "Twelve Data": "twelve_data",
+        "自定义 API": "custom",
+    }
+    selected_providers = st.multiselect(
+        "选择要使用的数据源",
+        list(provider_options.keys()),
+        default=["Financial Modeling Prep", "Finnhub", "Alpha Vantage", "EODHD"],
+    )
+    os.environ["FREE_DATA_PROVIDERS"] = ",".join(provider_options[name] for name in selected_providers)
     fmp_api_key = st.text_input("Financial Modeling Prep API key", type="password")
     finnhub_api_key = st.text_input("Finnhub API key", type="password")
     alpha_vantage_api_key = st.text_input("Alpha Vantage API key", type="password")
+    eodhd_api_key = st.text_input("EODHD API key", type="password")
+    twelve_data_api_key = st.text_input("Twelve Data API key", type="password")
+    custom_api_url = st.text_input(
+        "自定义 API URL 模板",
+        placeholder="例如 https://example.com/api?symbol={symbol}&apikey={api_key}",
+    )
+    custom_api_key = st.text_input("自定义 API key", type="password")
     _set_optional_api_key("FMP_API_KEY", fmp_api_key)
     _set_optional_api_key("FINNHUB_API_KEY", finnhub_api_key)
     _set_optional_api_key("ALPHA_VANTAGE_API_KEY", alpha_vantage_api_key)
+    _set_optional_api_key("EODHD_API_KEY", eodhd_api_key)
+    _set_optional_api_key("TWELVE_DATA_API_KEY", twelve_data_api_key)
+    _set_optional_env("CUSTOM_FINANCIAL_API_URL", custom_api_url)
+    _set_optional_api_key("CUSTOM_FINANCIAL_API_KEY", custom_api_key)
 
 with st.expander("可选：加入 earnings call、meeting、10-K 业务信号分析"):
     earnings_call_text = st.text_area("最近 earnings call 摘要或文字", height=120)

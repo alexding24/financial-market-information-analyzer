@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from typing import Any
+from urllib.parse import quote_plus
 
 import pandas as pd
 import requests
@@ -26,13 +27,24 @@ class FreeApiData:
 
 def fetch_free_api_data(symbol: str) -> FreeApiData:
     merged = FreeApiData()
-    for provider_data in [
-        _fetch_fmp_data(symbol),
-        _fetch_finnhub_data(symbol),
-        _fetch_alpha_vantage_data(symbol),
-    ]:
-        merged = _merge(merged, provider_data)
+    provider_loaders = {
+        "fmp": _fetch_fmp_data,
+        "finnhub": _fetch_finnhub_data,
+        "alpha_vantage": _fetch_alpha_vantage_data,
+        "eodhd": _fetch_eodhd_data,
+        "twelve_data": _fetch_twelve_data,
+        "custom": _fetch_custom_data,
+    }
+    selected = _selected_providers(provider_loaders)
+    for provider in selected:
+        merged = _merge(merged, provider_loaders[provider](symbol))
     return merged
+
+
+def _selected_providers(provider_loaders: dict[str, Any]) -> list[str]:
+    raw_value = os.getenv("FREE_DATA_PROVIDERS", "fmp,finnhub,alpha_vantage,eodhd,twelve_data,custom")
+    selected = [item.strip().lower() for item in raw_value.split(",") if item.strip()]
+    return [provider for provider in selected if provider in provider_loaders]
 
 
 def _merge(base: FreeApiData, update: FreeApiData) -> FreeApiData:
@@ -107,6 +119,30 @@ def _target_dict(mean: float | None) -> dict[str, float] | None:
     if mean is None:
         return None
     return {"mean": mean}
+
+
+def _flatten(data: Any, prefix: str = "") -> dict[str, Any]:
+    if isinstance(data, list):
+        return _flatten(data[0], prefix) if data else {}
+    if not isinstance(data, dict):
+        return {}
+
+    flat: dict[str, Any] = {}
+    for key, value in data.items():
+        flat_key = f"{prefix}.{key}" if prefix else str(key)
+        flat[flat_key] = value
+        if isinstance(value, (dict, list)):
+            flat.update(_flatten(value, flat_key))
+    return flat
+
+
+def _pick_text(data: dict[str, Any], keys: list[str]) -> str | None:
+    lowered = {key.lower(): value for key, value in data.items()}
+    for key in keys:
+        value = lowered.get(key.lower())
+        if value not in (None, "", "None", "N/A"):
+            return str(value)
+    return None
 
 
 def _fetch_fmp_data(symbol: str) -> FreeApiData:
@@ -205,5 +241,92 @@ def _fetch_alpha_vantage_data(symbol: str) -> FreeApiData:
         forward_pe=_pick_num(overview, ["ForwardPE"]),
         revenue_growth=_pick_num(overview, ["QuarterlyRevenueGrowthYOY"]),
         profit_margins=_pick_num(overview, ["ProfitMargin"]),
+        analyst_price_targets=_target_dict(target),
+    )
+
+
+def _fetch_eodhd_data(symbol: str) -> FreeApiData:
+    api_key = os.getenv("EODHD_API_KEY")
+    if not api_key:
+        return FreeApiData()
+
+    eodhd_symbol = _eodhd_symbol(symbol)
+    payload = _get_json(
+        f"https://eodhd.com/api/fundamentals/{eodhd_symbol}",
+        {"api_token": api_key, "fmt": "json"},
+    )
+    flat = _flatten(payload)
+
+    current_price = _pick_num(flat, ["Highlights.MarketCapitalization"])
+    market_cap = _pick_num(flat, ["Highlights.MarketCapitalization", "Valuation.MarketCapitalization"])
+    trailing_pe = _pick_num(flat, ["Highlights.PERatio", "Valuation.TrailingPE"])
+    forward_pe = _pick_num(flat, ["Valuation.ForwardPE", "Highlights.ForwardPE"])
+    target = _pick_num(flat, ["Highlights.WallStreetTargetPrice", "AnalystRatings.TargetPrice"])
+
+    return FreeApiData(
+        company_name=_pick_text(flat, ["General.Name", "Name"]),
+        sector=_pick_text(flat, ["General.Sector", "Sector"]),
+        industry=_pick_text(flat, ["General.Industry", "Industry"]),
+        currency=_pick_text(flat, ["General.CurrencyCode", "CurrencyCode"]),
+        current_price=None if current_price == market_cap else current_price,
+        market_cap=market_cap,
+        trailing_pe=trailing_pe,
+        forward_pe=forward_pe,
+        revenue_growth=_pick_num(flat, ["Highlights.QuarterlyRevenueGrowthYOY", "QuarterlyRevenueGrowthYOY"]),
+        profit_margins=_pick_num(flat, ["Highlights.ProfitMargin", "ProfitMargin"]),
+        analyst_price_targets=_target_dict(target),
+    )
+
+
+def _eodhd_symbol(symbol: str) -> str:
+    if symbol.endswith(".HK"):
+        return symbol.replace(".HK", ".HK")
+    if symbol.endswith(".SS"):
+        return symbol.replace(".SS", ".SHG")
+    if symbol.endswith(".SZ"):
+        return symbol.replace(".SZ", ".SHE")
+    return f"{symbol}.US"
+
+
+def _fetch_twelve_data(symbol: str) -> FreeApiData:
+    api_key = os.getenv("TWELVE_DATA_API_KEY")
+    if not api_key:
+        return FreeApiData()
+
+    quote = _first(_get_json("https://api.twelvedata.com/quote", {"symbol": symbol, "apikey": api_key}))
+    profile = _first(_get_json("https://api.twelvedata.com/profile", {"symbol": symbol, "apikey": api_key}))
+    flat = _flatten({**quote, **profile})
+    return FreeApiData(
+        company_name=_pick_text(flat, ["name", "company_name"]),
+        sector=_pick_text(flat, ["sector"]),
+        industry=_pick_text(flat, ["industry"]),
+        currency=_pick_text(flat, ["currency"]),
+        current_price=_pick_num(flat, ["close", "price"]),
+        market_cap=_pick_num(flat, ["market_cap", "marketCapitalization"]),
+    )
+
+
+def _fetch_custom_data(symbol: str) -> FreeApiData:
+    url_template = os.getenv("CUSTOM_FINANCIAL_API_URL", "").strip()
+    if not url_template:
+        return FreeApiData()
+
+    api_key = os.getenv("CUSTOM_FINANCIAL_API_KEY", "").strip()
+    url = url_template.format(symbol=quote_plus(symbol), api_key=quote_plus(api_key))
+    payload = _get_json(url, {})
+    flat = _flatten(payload)
+    target = _pick_num(flat, ["targetMean", "target_mean", "analystTargetPrice", "AnalystTargetPrice"])
+
+    return FreeApiData(
+        company_name=_pick_text(flat, ["companyName", "company_name", "name", "Name"]),
+        sector=_pick_text(flat, ["sector", "Sector"]),
+        industry=_pick_text(flat, ["industry", "Industry"]),
+        currency=_pick_text(flat, ["currency", "Currency"]),
+        current_price=_pick_num(flat, ["price", "currentPrice", "regularMarketPrice", "close"]),
+        market_cap=_pick_num(flat, ["marketCap", "market_cap", "MarketCapitalization"]),
+        trailing_pe=_pick_num(flat, ["trailingPE", "pe", "PERatio"]),
+        forward_pe=_pick_num(flat, ["forwardPE", "ForwardPE"]),
+        revenue_growth=_pick_num(flat, ["revenueGrowth", "QuarterlyRevenueGrowthYOY"]),
+        profit_margins=_pick_num(flat, ["profitMargins", "ProfitMargin"]),
         analyst_price_targets=_target_dict(target),
     )
