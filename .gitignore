@@ -4,3 +4,5 @@ __pycache__/
 .DS_Store
 *.zip
 .idea/
+reports/*_report.md
+reports/history/*.jsonl
