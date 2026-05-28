@@ -36,6 +36,7 @@ def fetch_free_api_data(symbol: str) -> FreeApiData:
         "eodhd": _fetch_eodhd_data,
         "twelve_data": _fetch_twelve_data,
         "sec": _fetch_sec_data,
+        "akshare": _fetch_akshare_data,
         "custom": _fetch_custom_data,
     }
     selected = _selected_providers(provider_loaders)
@@ -341,3 +342,79 @@ def _fetch_sec_data(symbol: str) -> FreeApiData:
         revenue_growth=facts.revenue_growth,
         profit_margins=facts.profit_margins,
     )
+
+
+def _fetch_akshare_data(symbol: str) -> FreeApiData:
+    try:
+        import akshare as ak
+    except Exception:
+        return FreeApiData()
+
+    if symbol.endswith((".SS", ".SZ")):
+        return _fetch_akshare_a_share_data(ak, symbol)
+    if symbol.endswith(".HK"):
+        return _fetch_akshare_hk_data(ak, symbol)
+    return FreeApiData()
+
+
+def _a_share_code(symbol: str) -> str:
+    return symbol.split(".", 1)[0]
+
+
+def _hk_code(symbol: str) -> str:
+    return symbol.split(".", 1)[0].zfill(5)
+
+
+def _fetch_akshare_a_share_data(ak: Any, symbol: str) -> FreeApiData:
+    code = _a_share_code(symbol)
+    info = _ak_dict(lambda: ak.stock_individual_info_em(symbol=code), "item", "value")
+    spot = _ak_row(lambda: ak.stock_zh_a_spot_em(), "代码", code)
+
+    return FreeApiData(
+        company_name=_pick_text(info, ["股票简称", "股票名称", "证券简称"]) or _pick_text(spot, ["名称"]),
+        sector=_pick_text(info, ["行业", "所属行业"]),
+        industry=_pick_text(info, ["行业", "所属行业"]),
+        currency="CNY",
+        current_price=_pick_num(spot, ["最新价"]),
+        market_cap=_pick_num(info, ["总市值"]) or _pick_num(spot, ["总市值"]),
+        trailing_pe=_pick_num(spot, ["市盈率-动态", "市盈率"]),
+        profit_margins=None,
+    )
+
+
+def _fetch_akshare_hk_data(ak: Any, symbol: str) -> FreeApiData:
+    code = _hk_code(symbol)
+    spot = _ak_row(lambda: ak.stock_hk_spot_em(), "代码", code)
+
+    return FreeApiData(
+        company_name=_pick_text(spot, ["名称", "中文名称"]),
+        sector=_pick_text(spot, ["行业"]),
+        industry=_pick_text(spot, ["行业"]),
+        currency="HKD",
+        current_price=_pick_num(spot, ["最新价", "现价"]),
+        market_cap=_pick_num(spot, ["总市值", "市值"]),
+        trailing_pe=_pick_num(spot, ["市盈率", "PE"]),
+    )
+
+
+def _ak_row(loader: Any, code_column: str, code: str) -> dict[str, Any]:
+    try:
+        frame = loader()
+    except Exception:
+        return {}
+    if frame is None or frame.empty or code_column not in frame.columns:
+        return {}
+    matched = frame[frame[code_column].astype(str).str.zfill(len(code)) == code]
+    if matched.empty:
+        return {}
+    return matched.iloc[0].to_dict()
+
+
+def _ak_dict(loader: Any, key_column: str, value_column: str) -> dict[str, Any]:
+    try:
+        frame = loader()
+    except Exception:
+        return {}
+    if frame is None or frame.empty or key_column not in frame.columns or value_column not in frame.columns:
+        return {}
+    return dict(zip(frame[key_column].astype(str), frame[value_column]))

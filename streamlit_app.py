@@ -109,6 +109,7 @@ with st.expander("可选：免费数据源 API key"):
         "EODHD": "eodhd",
         "Twelve Data": "twelve_data",
         "SEC EDGAR 官方财报": "sec",
+        "AkShare A股/港股": "akshare",
         "自定义 API": "custom",
     }
     selected_providers = st.multiselect(

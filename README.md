@@ -18,7 +18,7 @@
 - 自动搜索 Yahoo Finance 新闻摘要和 SEC 最近 10-K / 10-Q
 - 自动生成买前检查清单
 - 自动提取最近季度关键财务表格
-- 可选接入 SEC EDGAR 官方财报、Financial Modeling Prep、Finnhub、Alpha Vantage、EODHD、Twelve Data 免费 API key，补充市值、PE、收入增长、利润率、分析师目标价等字段
+- 可选接入 SEC EDGAR 官方财报、AkShare、Financial Modeling Prep、Finnhub、Alpha Vantage、EODHD、Twelve Data 免费 API key，补充市值、PE、收入增长、利润率、分析师目标价等字段
 - 自动保存历史快照，并和上次报告对比
 - 多股票输入时生成股票池 / 行业机会评分排序
 - 输入几个字母时，网页会提示可能想搜索的股票代码
@@ -107,6 +107,7 @@ NVDA, AMD, INTC
 网页里展开“可选：免费数据源 API key”，可以临时填写：
 
 - `SEC EDGAR 官方财报`，不需要 key，适合补美股收入、净利润、现金流、资产负债表字段
+- `AkShare A股/港股`，不需要 key，适合补 A 股和港股的价格、市值、行业等字段
 - `Financial Modeling Prep API key`
 - `Finnhub API key`
 - `Alpha Vantage API key`
@@ -115,6 +116,8 @@ NVDA, AMD, INTC
 - 自定义 API URL 模板和自定义 API key
 
 这些 key 用来补充免费公开数据源缺失的字段。不同免费 API 的开放字段和额度不同，所以不能保证每次都拿全，但通常会比只用 Yahoo Finance 更完整。你也可以在同一个区域勾选要使用的数据源，方便测试哪个源更稳定。
+
+AkShare 不需要 key，但它依赖国内公开网页接口，偶尔会变慢、限流或返回空数据。建议只在查询 A 股 / 港股时手动勾选。
 
 每次生成报告时，程序会在 `reports/history/` 里保存一个历史快照。下次再生成同一只股票报告时，会自动比较机会评分、资金流向、分析师共识和关键词次数变化。
 
@@ -153,7 +156,7 @@ export TWELVE_DATA_API_KEY="你的 Twelve Data key"
 也可以限制只使用部分数据源：
 
 ```bash
-export FREE_DATA_PROVIDERS="sec,fmp,finnhub,alpha_vantage,eodhd,twelve_data"
+export FREE_DATA_PROVIDERS="sec,akshare,fmp,finnhub,alpha_vantage,eodhd,twelve_data"
 ```
 
 如果你有自己的 API，可以设置：
