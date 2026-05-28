@@ -40,6 +40,45 @@ def _replace_last_symbol(raw_text: str, symbol: str) -> str:
     return ", ".join(part for part in parts if part)
 
 
+def _manual_documents() -> list[SourceDocument]:
+    return [
+        SourceDocument("earnings_call", earnings_call_text),
+        SourceDocument("meeting", meeting_text),
+        SourceDocument("tenk", tenk_text),
+    ]
+
+
+def _build_document_only_report(symbol: str, reason: str) -> tuple[str, str]:
+    documents = _manual_documents()
+    notes = [f"{symbol}: 行情数据暂时不可用，已切换为公开材料分析模式。原因：{reason}"]
+    if auto_research:
+        public_result = fetch_public_documents(symbol, symbol)
+        documents.extend(public_result.documents)
+        notes.extend(public_result.notes)
+
+    signal_summary = analyze_business_signals(
+        documents,
+        parse_keywords(keywords_text),
+        notes,
+    )
+    signal_section = format_business_signal_report(signal_summary)
+    report = f"""# {symbol} 公开材料分析报告
+
+## 数据状态
+
+行情数据源暂时限流或不可用，所以本次先跳过价格走势、资金流、估值和分析师评级。
+
+这个报告仍会尽量根据 earnings call、meeting、10-K、SEC 文件和新闻摘要分析公司业务动向。
+"""
+    if signal_section:
+        report += "\n" + signal_section
+    else:
+        report += "\n## 业务信号分析\n\n暂时没有足够公开材料可分析。可以展开上面的输入框，手动粘贴 earnings call、meeting 或 10-K 摘要后再生成。\n"
+
+    output_path = save_report(symbol, report)
+    return report, str(output_path)
+
+
 market_label = st.selectbox("市场", list(MARKET_OPTIONS.keys()), index=0)
 market = MARKET_OPTIONS[market_label]
 symbols_text = st.text_input("输入股票代码", value="NVDA", placeholder="例如 AAPL, NVDA, TSLA")
@@ -70,14 +109,16 @@ if st.button("生成分析报告", type="primary"):
                 reports = []
                 comparison_rows = []
                 for symbol in symbols:
-                    snapshot = fetch_stock_snapshot(symbol)
+                    try:
+                        snapshot = fetch_stock_snapshot(symbol)
+                    except (YFRateLimitError, ValueError) as exc:
+                        report, output_path = _build_document_only_report(symbol, str(exc))
+                        reports.append((symbol, report, output_path))
+                        continue
+
                     summary = summarize_stock(snapshot)
                     report = build_report(summary)
-                    documents = [
-                        SourceDocument("earnings_call", earnings_call_text),
-                        SourceDocument("meeting", meeting_text),
-                        SourceDocument("tenk", tenk_text),
-                    ]
+                    documents = _manual_documents()
                     notes = []
                     if auto_research:
                         public_result = fetch_public_documents(symbol, summary.company_name)

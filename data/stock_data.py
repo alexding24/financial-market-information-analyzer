@@ -1,9 +1,14 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
+from datetime import date, timedelta
 
 import pandas as pd
 import yfinance as yf
+from yfinance.exceptions import YFRateLimitError
+
+from data.ticker_search import COMMON_TICKERS
 
 
 @dataclass(frozen=True)
@@ -34,18 +39,22 @@ def _safe_float(value: object) -> float | None:
 
 
 def fetch_stock_snapshot(symbol: str, period: str = "6mo") -> StockSnapshot:
+    normalized_symbol = symbol.upper()
     ticker = yf.Ticker(symbol)
-    info = ticker.info or {}
-    history = ticker.history(period=period)
+    info = _safe_dict(lambda: ticker.info) or {}
+    history = _safe_history(lambda: ticker.history(period=period))
+    if history.empty:
+        history = _fetch_stooq_history(normalized_symbol)
+
     recommendations_summary = _safe_dataframe(lambda: ticker.recommendations_summary)
     analyst_price_targets = _safe_dict(lambda: ticker.analyst_price_targets)
 
     if history.empty:
-        raise ValueError(f"没有找到 {symbol} 的股价数据，请检查股票代码是否正确。")
+        raise ValueError(f"没有找到 {normalized_symbol} 的股价数据，请检查股票代码是否正确，或稍后再试。")
 
     return StockSnapshot(
-        symbol=symbol.upper(),
-        company_name=info.get("longName") or info.get("shortName") or symbol.upper(),
+        symbol=normalized_symbol,
+        company_name=info.get("longName") or info.get("shortName") or COMMON_TICKERS.get(normalized_symbol) or normalized_symbol,
         sector=info.get("sector") or "Unknown",
         industry=info.get("industry") or "Unknown",
         currency=info.get("currency") or "USD",
@@ -71,6 +80,18 @@ def _safe_dataframe(loader) -> pd.DataFrame | None:
     return None
 
 
+def _safe_history(loader) -> pd.DataFrame:
+    try:
+        value = loader()
+    except YFRateLimitError:
+        return pd.DataFrame()
+    except Exception:
+        return pd.DataFrame()
+    if isinstance(value, pd.DataFrame) and not value.empty:
+        return value
+    return pd.DataFrame()
+
+
 def _safe_dict(loader) -> dict[str, float] | None:
     try:
         value = loader()
@@ -79,3 +100,29 @@ def _safe_dict(loader) -> dict[str, float] | None:
     if isinstance(value, dict) and value:
         return value
     return None
+
+
+def _fetch_stooq_history(symbol: str) -> pd.DataFrame:
+    if "." in symbol:
+        return pd.DataFrame()
+    api_key = os.getenv("STOOQ_API_KEY")
+    if not api_key:
+        return pd.DataFrame()
+
+    end = date.today()
+    start = end - timedelta(days=210)
+    url = (
+        "https://stooq.com/q/d/l/"
+        f"?s={symbol.lower()}.us&i=d&d1={start:%Y%m%d}&d2={end:%Y%m%d}&apikey={api_key}"
+    )
+
+    try:
+        history = pd.read_csv(url, parse_dates=["Date"])
+    except Exception:
+        return pd.DataFrame()
+
+    if history.empty or "Close" not in history.columns:
+        return pd.DataFrame()
+
+    history = history.set_index("Date").sort_index()
+    return history.rename_axis(None)
