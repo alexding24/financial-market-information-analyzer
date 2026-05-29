@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 
 from analysis.i18n import Language
+from analysis.news_links import NewsLink
 
 DEFAULT_KEYWORDS = [
     "AI",
@@ -78,6 +79,7 @@ class BusinessSignalSummary:
     keyword_mentions: list[KeywordMention]
     source_count: int
     notes: list[str]
+    public_links: list[NewsLink] = None
 
 
 def parse_keywords(raw_keywords: str | None) -> list[str]:
@@ -119,6 +121,7 @@ def analyze_business_signals(
     documents: list[SourceDocument],
     keywords: list[str] | None = None,
     notes: list[str] | None = None,
+    public_links: list[NewsLink] | None = None,
 ) -> BusinessSignalSummary | None:
     clean_documents = [document for document in documents if document.text.strip()]
     if not clean_documents:
@@ -172,6 +175,7 @@ def analyze_business_signals(
         keyword_mentions=mentions,
         source_count=len(clean_documents),
         notes=notes or [],
+        public_links=public_links or [],
     )
 
 

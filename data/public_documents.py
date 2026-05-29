@@ -9,6 +9,7 @@ import yfinance as yf
 from bs4 import BeautifulSoup
 
 from analysis.business_signals import SourceDocument
+from analysis.news_links import NewsLink
 from data.cache import ttl_cache
 from data.market_symbols import is_us_symbol
 
@@ -42,6 +43,7 @@ FILING_SIGNAL_TERMS = [
 class PublicDocumentResult:
     documents: list[SourceDocument]
     notes: list[str]
+    links: list[NewsLink] = None
 
 
 def _request_headers() -> dict[str, str]:
@@ -90,6 +92,31 @@ def _news_text_from_item(item: dict) -> str:
     return _clean_text(" ".join(part for part in [publisher, title, summary] if part))
 
 
+def _news_title_from_item(item: dict) -> str:
+    content = item.get("content") if isinstance(item.get("content"), dict) else {}
+    return _clean_text(str(item.get("title") or content.get("title") or "Yahoo Finance news"), max_chars=160)
+
+
+def _url_from_nested(value: object) -> str | None:
+    if isinstance(value, str) and value.startswith(("http://", "https://")):
+        return value
+    if isinstance(value, dict):
+        for key in ["url", "link", "canonicalUrl", "clickThroughUrl"]:
+            found = _url_from_nested(value.get(key))
+            if found:
+                return found
+        for nested in value.values():
+            found = _url_from_nested(nested)
+            if found:
+                return found
+    if isinstance(value, list):
+        for item in value:
+            found = _url_from_nested(item)
+            if found:
+                return found
+    return None
+
+
 def _classify_news_source(text: str) -> str:
     lowered = text.lower()
     if any(term in lowered for term in ["earnings", "results", "quarter", "guidance", "outlook"]):
@@ -115,20 +142,24 @@ def fetch_yahoo_news_documents(symbol: str, company_name: str | None = None, max
     try:
         news_items = yf.Ticker(symbol).news or []
     except Exception as exc:
-        return PublicDocumentResult([], [f"{symbol}: Yahoo Finance 新闻读取失败：{exc}"])
+        return PublicDocumentResult([], [f"{symbol}: Yahoo Finance 新闻读取失败：{exc}"], [])
 
     terms = _company_terms(symbol, company_name)
     documents: list[SourceDocument] = []
+    links: list[NewsLink] = []
     for item in news_items:
         text = _news_text_from_item(item)
         lowered = text.lower()
         if text and any(term in lowered for term in terms):
             documents.append(SourceDocument(_classify_news_source(text), text))
+            url = _url_from_nested(item)
+            if url:
+                links.append(NewsLink(_news_title_from_item(item), url, "Yahoo Finance"))
         if len(documents) >= max_items:
             break
 
     notes = [f"{symbol}: 自动读取 Yahoo Finance 新闻摘要 {len(documents)} 条。"] if documents else [f"{symbol}: 没有读取到 Yahoo Finance 新闻摘要。"]
-    return PublicDocumentResult(documents, notes)
+    return PublicDocumentResult(documents, notes, links)
 
 
 def _ticker_to_cik(symbol: str) -> str | None:
@@ -161,11 +192,11 @@ def fetch_sec_filing_document(symbol: str, forms: tuple[str, ...] | None = None)
     try:
         cik = _ticker_to_cik(symbol)
         if not cik:
-            return PublicDocumentResult([], [f"{symbol}: SEC 没有找到对应 CIK。"])
+            return PublicDocumentResult([], [f"{symbol}: SEC 没有找到对应 CIK。"], [])
 
         filing = _latest_filing_metadata(cik, target_forms)
         if not filing:
-            return PublicDocumentResult([], [f"{symbol}: SEC 最近申报里没有找到 10-K / 10-Q。"])
+            return PublicDocumentResult([], [f"{symbol}: SEC 最近申报里没有找到 10-K / 10-Q。"], [])
 
         form, accession, document = filing
         archive_url = SEC_ARCHIVE_URL.format(
@@ -179,15 +210,17 @@ def fetch_sec_filing_document(symbol: str, forms: tuple[str, ...] | None = None)
         return PublicDocumentResult(
             [SourceDocument("tenk", f"{form} filing from SEC. {text}")],
             [f"{symbol}: 自动读取 SEC 最近 {form}：{document}。"],
+            [NewsLink(f"SEC latest {form}: {document}", archive_url, "SEC EDGAR")],
         )
     except Exception as exc:
-        return PublicDocumentResult([], [f"{symbol}: SEC 申报读取失败：{exc}"])
+        return PublicDocumentResult([], [f"{symbol}: SEC 申报读取失败：{exc}"], [])
 
 
 @ttl_cache(seconds=1800)
 def fetch_public_documents(symbol: str, company_name: str | None = None) -> PublicDocumentResult:
     documents: list[SourceDocument] = []
     notes: list[str] = []
+    links: list[NewsLink] = []
 
     results = [fetch_yahoo_news_documents(symbol, company_name)]
     if is_us_symbol(symbol):
@@ -198,5 +231,6 @@ def fetch_public_documents(symbol: str, company_name: str | None = None) -> Publ
     for result in results:
         documents.extend(result.documents)
         notes.extend(result.notes)
+        links.extend(result.links or [])
 
-    return PublicDocumentResult(documents, notes)
+    return PublicDocumentResult(documents, notes, links)

@@ -20,6 +20,7 @@ from analysis.research_features import (
     load_last_snapshot,
     save_snapshot,
 )
+from analysis.news_links import market_news_links
 from analysis.stock_summary import comparison_row, summarize_stock
 from data.financial_tables import fetch_financial_metrics, format_financial_metrics
 from data.market_symbols import normalize_symbol
@@ -101,12 +102,14 @@ def build_business_signal_summary(
         SourceDocument("tenk", _read_optional_file(tenk_file)),
     ]
     notes: list[str] = []
+    links = []
     if auto_research and symbol:
         public_result = fetch_public_documents(symbol, company_name)
         documents.extend(public_result.documents)
         notes.extend(public_result.notes)
+        links.extend(public_result.links or [])
 
-    return analyze_business_signals(documents, parse_keywords(raw_keywords), notes)
+    return analyze_business_signals(documents, parse_keywords(raw_keywords), notes, links)
 
 
 def build_business_signal_section(
@@ -171,8 +174,10 @@ def main() -> None:
             args.keywords,
             args.auto_research,
         )
+        public_links = business_signal_summary.public_links if business_signal_summary else []
         previous_snapshot = load_last_snapshot(symbol)
         report += "\n" + format_buy_checklist(summary, args.language)
+        report += "\n" + market_news_links(symbol, summary.company_name, summary.sector, summary.industry, public_links, args.language)
         report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol), args.language)
         report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary, args.language)
         business_signal_section = format_business_signal_report(business_signal_summary, args.language)

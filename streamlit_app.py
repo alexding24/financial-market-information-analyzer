@@ -12,6 +12,7 @@ from analysis.business_signals import (
     format_business_signal_report,
     parse_keywords,
 )
+from analysis.news_links import market_news_links
 from analysis.research_features import (
     format_buy_checklist,
     format_history_comparison,
@@ -146,10 +147,12 @@ def _manual_documents() -> list[SourceDocument]:
 def _build_document_only_report(symbol: str, reason: str) -> tuple[str, str]:
     documents = _manual_documents()
     notes = [f"{symbol}: 行情数据暂时不可用，已切换为公开材料分析模式。原因：{reason}"]
+    links = []
     if auto_research:
         public_result = fetch_public_documents(symbol, symbol)
         documents.extend(public_result.documents)
         notes.extend(public_result.notes)
+        links.extend(public_result.links or [])
 
     signal_summary = analyze_business_signals(
         documents,
@@ -170,6 +173,7 @@ It still analyzes company business signals using earnings calls, meetings, 10-K/
             report += "\n" + signal_section
         else:
             report += "\n## Business Signal Analysis\n\nNot enough public materials are available yet. You can paste earnings call, meeting, or 10-K text in the input area above and generate the report again.\n"
+        report += "\n" + market_news_links(symbol, symbol, None, None, links, language)
         output_path = save_report(symbol, report)
         return report, str(output_path)
 
@@ -185,6 +189,7 @@ It still analyzes company business signals using earnings calls, meetings, 10-K/
         report += "\n" + signal_section
     else:
         report += "\n## 业务信号分析\n\n暂时没有足够公开材料可分析。可以展开上面的输入框，手动粘贴 earnings call、meeting 或 10-K 摘要后再生成。\n"
+    report += "\n" + market_news_links(symbol, symbol, None, None, links, language)
 
     output_path = save_report(symbol, report)
     return report, str(output_path)
@@ -279,17 +284,21 @@ if st.button(t["generate"], type="primary"):
                     report = build_report(summary, language)
                     documents = _manual_documents()
                     notes = []
+                    links = []
                     if auto_research:
                         public_result = fetch_public_documents(symbol, summary.company_name)
                         documents.extend(public_result.documents)
                         notes.extend(public_result.notes)
+                        links.extend(public_result.links or [])
                     business_signal_summary = analyze_business_signals(
                         documents,
                         parse_keywords(keywords_text),
                         notes,
+                        links,
                     )
                     previous_snapshot = load_last_snapshot(symbol)
                     report += "\n" + format_buy_checklist(summary, language)
+                    report += "\n" + market_news_links(symbol, summary.company_name, summary.sector, summary.industry, links, language)
                     report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol), language)
                     report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary, language)
                     business_signal_section = format_business_signal_report(business_signal_summary, language)
