@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from analysis.i18n import Language
 
 DEFAULT_KEYWORDS = [
     "AI",
@@ -174,11 +175,14 @@ def analyze_business_signals(
     )
 
 
-def format_business_signal_report(summary: BusinessSignalSummary | None) -> str:
+def format_business_signal_report(summary: BusinessSignalSummary | None, language: Language = "zh") -> str:
     if summary is None:
         return ""
 
-    keyword_table = "| 关键词 | Earnings call | Meeting | 10-K / 10-Q | News | 合计 |\n"
+    if language == "en":
+        keyword_table = "| Keyword | Earnings call | Meeting | 10-K / 10-Q | News | Total |\n"
+    else:
+        keyword_table = "| 关键词 | Earnings call | Meeting | 10-K / 10-Q | News | 合计 |\n"
     keyword_table += "| --- | ---: | ---: | ---: | ---: | ---: |\n"
     if summary.keyword_mentions:
         for mention in summary.keyword_mentions:
@@ -187,11 +191,33 @@ def format_business_signal_report(summary: BusinessSignalSummary | None) -> str:
                 f"{mention.tenk} | {mention.news} | {mention.total} |\n"
             )
     else:
-        keyword_table += "| 暂无命中 | 0 | 0 | 0 | 0 | 0 |\n"
+        keyword_table += f"| {'No matches' if language == 'en' else '暂无命中'} | 0 | 0 | 0 | 0 | 0 |\n"
 
     notes_text = ""
     if summary.notes:
         notes_text = "\n".join(f"- {note}" for note in summary.notes) + "\n"
+
+    if language == "en":
+        future_direction = (
+            "- No clear future plans, demand signals, risks, or guidance were identified from the provided content."
+            if summary.future_direction == "- 暂未从输入内容中识别到明确的未来计划、需求、风险或指引表述。"
+            else summary.future_direction
+        )
+        return f"""## Business Direction and Keyword Signals
+
+Important source count analyzed: {summary.source_count}
+
+{notes_text}
+### Future Direction Clues
+
+{future_direction}
+
+### Keyword Mentions
+
+{keyword_table}
+
+Note: this counts keyword mentions in the earnings call, meeting, 10-K, or summary text you provided. The more complete the input, the more useful the result.
+"""
 
     return f"""## 业务动向和关键词信号
 

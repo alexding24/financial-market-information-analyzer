@@ -4,6 +4,7 @@ import argparse
 import re
 from pathlib import Path
 
+from analysis.i18n import Language, label, missing_value
 from analysis.ai_report import build_report
 from analysis.business_signals import (
     BusinessSignalSummary,
@@ -46,8 +47,15 @@ def parse_symbols(raw_symbols: list[str], market: str = "auto") -> list[str]:
     return symbols
 
 
-def build_comparison_report(rows: list[dict[str, str | float | None]]) -> str:
-    header = "| 股票代码 | 公司名称 | 行业板块 | 细分行业 | 近六个月涨跌幅 | 收入增长 | 利润率 | 未来市盈率 | 成交额方向估算 | 分析师共识 | 目标价空间 | 风险 |\n"
+def build_comparison_report(rows: list[dict[str, str | float | None]], language: Language = "zh") -> str:
+    if language == "en":
+        header = "| Symbol | Company | Sector | Industry | Six-month return | Revenue growth | Profit margin | Forward P/E | Dollar-volume direction estimate | Analyst consensus | Target upside | Risk |\n"
+        title = "# Stock Comparison Report\n\n"
+        disclaimer = "\n> This report is for learning and research only. It is not investment advice.\n"
+    else:
+        header = "| 股票代码 | 公司名称 | 行业板块 | 细分行业 | 近六个月涨跌幅 | 收入增长 | 利润率 | 未来市盈率 | 成交额方向估算 | 分析师共识 | 目标价空间 | 风险 |\n"
+        title = "# 股票对比报告\n\n"
+        disclaimer = "\n> 这份报告是学习和研究用途，不构成投资建议。\n"
     divider = "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | ---: | --- |\n"
     body = ""
 
@@ -60,16 +68,16 @@ def build_comparison_report(rows: list[dict[str, str | float | None]]) -> str:
         body += (
             f"| {row['股票代码']} | {row['公司名称']} | {row['行业板块']} | {row['细分行业']} | "
             f"{six_month_return:.1%} | "
-            f"{'暂无数据' if revenue_growth is None else f'{revenue_growth:.1%}'} | "
-            f"{'暂无数据' if profit_margins is None else f'{profit_margins:.1%}'} | "
-            f"{'暂无数据' if forward_pe is None else f'{forward_pe:.1f}'} | "
-            f"{row['成交额方向估算']} | "
-            f"{row['分析师共识']} | "
-            f"{'暂无数据' if target_upside is None else f'{target_upside:.1%}'} | "
-            f"{row['基础风险等级']} |\n"
+            f"{missing_value(language) if revenue_growth is None else f'{revenue_growth:.1%}'} | "
+            f"{missing_value(language) if profit_margins is None else f'{profit_margins:.1%}'} | "
+            f"{missing_value(language) if forward_pe is None else f'{forward_pe:.1f}'} | "
+            f"{label(str(row['成交额方向估算']), language)} | "
+            f"{label(str(row['分析师共识']), language)} | "
+            f"{missing_value(language) if target_upside is None else f'{target_upside:.1%}'} | "
+            f"{label(str(row['基础风险等级']), language)} |\n"
         )
 
-    return "# 股票对比报告\n\n" + header + divider + body + "\n> 这份报告是学习和研究用途，不构成投资建议。\n"
+    return title + header + divider + body + disclaimer
 
 
 def _read_optional_file(path: str | None) -> str:
@@ -109,6 +117,7 @@ def build_business_signal_section(
     tenk_file: str | None,
     raw_keywords: str | None,
     auto_research: bool = False,
+    language: Language = "zh",
 ) -> str:
     signal_summary = build_business_signal_summary(
         symbol,
@@ -119,7 +128,7 @@ def build_business_signal_section(
         raw_keywords,
         auto_research,
     )
-    return format_business_signal_report(signal_summary)
+    return format_business_signal_report(signal_summary, language)
 
 
 def main() -> None:
@@ -136,6 +145,12 @@ def main() -> None:
         default="auto",
         help="Market used to normalize symbols: auto, us, cn, hk",
     )
+    parser.add_argument(
+        "--language",
+        choices=["zh", "en"],
+        default="zh",
+        help="Report language: zh or en",
+    )
     args = parser.parse_args()
 
     symbols = parse_symbols(args.symbols, args.market)
@@ -146,7 +161,7 @@ def main() -> None:
     for symbol in symbols:
         snapshot = fetch_stock_snapshot(symbol)
         summary = summarize_stock(snapshot)
-        report = build_report(summary)
+        report = build_report(summary, args.language)
         business_signal_summary = build_business_signal_summary(
             symbol,
             summary.company_name,
@@ -157,10 +172,10 @@ def main() -> None:
             args.auto_research,
         )
         previous_snapshot = load_last_snapshot(symbol)
-        report += "\n" + format_buy_checklist(summary)
-        report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol))
-        report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary)
-        business_signal_section = format_business_signal_report(business_signal_summary)
+        report += "\n" + format_buy_checklist(summary, args.language)
+        report += "\n" + format_financial_metrics(fetch_financial_metrics(symbol), args.language)
+        report += "\n" + format_history_comparison(summary, previous_snapshot, business_signal_summary, args.language)
+        business_signal_section = format_business_signal_report(business_signal_summary, args.language)
         if business_signal_section:
             report += "\n" + business_signal_section
         output_path = save_report(symbol, report)
@@ -171,8 +186,8 @@ def main() -> None:
         print(f"\nReport saved to: {output_path}\n")
 
     if len(comparison_rows) > 1:
-        comparison_report = build_comparison_report(comparison_rows)
-        comparison_report += "\n" + format_industry_ranking(comparison_rows)
+        comparison_report = build_comparison_report(comparison_rows, args.language)
+        comparison_report += "\n" + format_industry_ranking(comparison_rows, args.language)
         comparison_path = save_report("comparison", comparison_report)
         print(comparison_report)
         print(f"\nComparison report saved to: {comparison_path}")

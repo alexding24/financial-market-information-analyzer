@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import pandas as pd
 import yfinance as yf
 
+from analysis.i18n import Language, missing_value
 from data.cache import ttl_cache
 from data.sec_company_facts import fetch_sec_company_facts
 
@@ -69,11 +70,19 @@ def fetch_financial_metrics(symbol: str) -> list[FinancialMetric]:
     return metrics
 
 
-def _money(value: float | None) -> str:
+def _money(value: float | None, language: Language = "zh") -> str:
     if value is None:
-        return "暂无数据"
+        return missing_value(language)
     sign = "-" if value < 0 else ""
     abs_value = abs(value)
+    if language == "en":
+        if abs_value >= 1_000_000_000_000:
+            return f"{sign}{abs_value / 1_000_000_000_000:.2f}T"
+        if abs_value >= 1_000_000_000:
+            return f"{sign}{abs_value / 1_000_000_000:.2f}B"
+        if abs_value >= 1_000_000:
+            return f"{sign}{abs_value / 1_000_000:.2f}M"
+        return f"{sign}{abs_value:,.0f}"
     if abs_value >= 1_000_000_000_000:
         return f"{sign}{abs_value / 1_000_000_000_000:.2f} 万亿"
     if abs_value >= 1_000_000_000:
@@ -83,20 +92,31 @@ def _money(value: float | None) -> str:
     return f"{sign}{abs_value:,.0f}"
 
 
-def _pct(value: float | None) -> str:
+def _pct(value: float | None, language: Language = "zh") -> str:
     if value is None:
-        return "暂无数据"
+        return missing_value(language)
     return f"{value:.1%}"
 
 
-def format_financial_metrics(metrics: list[FinancialMetric]) -> str:
+def format_financial_metrics(metrics: list[FinancialMetric], language: Language = "zh") -> str:
     if not metrics:
         return ""
 
-    table = "| 指标 | 最近季度 | 上一季度 | 环比变化 |\n"
+    if language == "en":
+        table = "| Metric | Latest quarter | Previous quarter | QoQ change |\n"
+    else:
+        table = "| 指标 | 最近季度 | 上一季度 | 环比变化 |\n"
     table += "| --- | ---: | ---: | ---: |\n"
     for metric in metrics:
-        table += f"| {metric.name} | {_money(metric.latest)} | {_money(metric.previous)} | {_pct(metric.change)} |\n"
+        table += f"| {metric.name} | {_money(metric.latest, language)} | {_money(metric.previous, language)} | {_pct(metric.change, language)} |\n"
+
+    if language == "en":
+        return f"""## Key Financial Tables
+
+{table}
+
+Note: this section prioritizes the latest quarterly financial tables available through Yahoo Finance. It is useful for a quick check, but it does not replace reviewing the official 10-K / 10-Q.
+"""
 
     return f"""## 财报关键表格
 

@@ -6,10 +6,26 @@ from datetime import datetime
 from pathlib import Path
 
 from analysis.business_signals import BusinessSignalSummary
+from analysis.i18n import Language, label, missing_value
 from analysis.stock_summary import StockSummary
 
 
 HISTORY_DIR = Path("reports/history")
+
+REASON_LABELS_EN = {
+    "近六个月趋势偏强": "six-month trend is strong",
+    "近六个月趋势偏弱": "six-month trend is weak",
+    "收入增长较快": "revenue growth is strong",
+    "收入增长为负": "revenue growth is negative",
+    "利润率较高": "profit margin is high",
+    "利润率为负": "profit margin is negative",
+    "未来市盈率相对可控": "forward P/E is relatively manageable",
+    "未来市盈率偏高": "forward P/E is high",
+    "成交额方向偏积极": "dollar-volume direction is positive",
+    "成交额方向偏谨慎": "dollar-volume direction is cautious",
+    "分析师共识偏正面": "analyst consensus is positive",
+    "分析师共识偏负面": "analyst consensus is negative",
+}
 
 
 def opportunity_score(summary: StockSummary) -> tuple[int, list[str]]:
@@ -64,11 +80,60 @@ def opportunity_score(summary: StockSummary) -> tuple[int, list[str]]:
     return max(0, min(100, score)), reasons
 
 
-def format_buy_checklist(summary: StockSummary) -> str:
+def format_buy_checklist(summary: StockSummary, language: Language = "zh") -> str:
     score, reasons = opportunity_score(summary)
     positives: list[str] = []
     cautions: list[str] = []
     questions: list[str] = []
+
+    if language == "en":
+        if summary.recent_trend == "偏强":
+            positives.append("Price trend is strong, suggesting relatively high near-term market recognition.")
+        if summary.revenue_growth is not None and summary.revenue_growth > 0:
+            positives.append("Revenue is still growing; continue checking the quality of that growth.")
+        if summary.capital_flow.signal == "成交额方向偏流入":
+            positives.append("The last-three-month dollar-volume direction estimate is positive.")
+        if summary.analyst.consensus in {"强烈看多", "看多"}:
+            positives.append("Analyst consensus is positive.")
+
+        if summary.forward_pe is not None and summary.forward_pe > 45:
+            cautions.append("Valuation is not cheap, so future growth needs to materialize.")
+        if summary.risk_level != "较低":
+            cautions.append(f"Base risk level is {label(summary.risk_level, language)}.")
+        if summary.analyst.target_upside is not None and summary.analyst.target_upside < 0:
+            cautions.append("Average target price is below the current price; expectations may be stretched.")
+
+        questions.extend(
+            [
+                "Did the latest quarter's growth come from real demand or one-off factors?",
+                "Did management raise guidance or merely maintain prior expectations?",
+                "Do peers offer more attractive growth, valuation, or dollar-volume signals?",
+            ]
+        )
+        translated_reasons = [REASON_LABELS_EN.get(reason, reason) for reason in reasons]
+        positives_text = "\n".join(f"- {item}" for item in positives) or "- No obvious bullish points yet."
+        cautions_text = "\n".join(f"- {item}" for item in cautions) or "- No obvious extra risk, but financials and industry changes still need review."
+        questions_text = "\n".join(f"- {item}" for item in questions)
+        reasons_text = ", ".join(translated_reasons) if translated_reasons else "signals are relatively neutral"
+        return f"""## Pre-Buy Checklist
+
+**Opportunity score**: {score}/100  
+**Reasoning**: {reasons_text}
+
+### Bullish Points
+
+{positives_text}
+
+### Caution Points
+
+{cautions_text}
+
+### Questions To Verify Next
+
+{questions_text}
+
+> This is not buy/sell advice. It is a checklist for organizing research questions.
+"""
 
     if summary.recent_trend == "偏强":
         positives.append("股价趋势偏强，说明市场短期认可度较高。")
@@ -156,17 +221,32 @@ def save_snapshot(summary: StockSummary, business: BusinessSignalSummary | None)
         file.write(json.dumps(snapshot, ensure_ascii=False) + "\n")
 
 
-def format_history_comparison(summary: StockSummary, previous: dict | None, business: BusinessSignalSummary | None) -> str:
+def format_history_comparison(
+    summary: StockSummary,
+    previous: dict | None,
+    business: BusinessSignalSummary | None,
+    language: Language = "zh",
+) -> str:
     if previous is None:
+        if language == "en":
+            return "## Historical Report Comparison\n\nThis is the first saved snapshot for this stock. The next report will compare changes automatically.\n"
         return "## 历史报告对比\n\n这是这个股票第一次保存历史快照，下一次生成报告后会自动比较变化。\n"
 
     score, _ = opportunity_score(summary)
-    lines = [
-        f"- 上次保存时间：{previous.get('timestamp', '未知')}",
-        f"- 机会评分变化：{previous.get('score', '暂无')} -> {score}",
-        f"- 成交额方向估算变化：{previous.get('capital_flow', '暂无')} -> {summary.capital_flow.signal}",
-        f"- 分析师共识变化：{previous.get('analyst_consensus', '暂无')} -> {summary.analyst.consensus}",
-    ]
+    if language == "en":
+        lines = [
+            f"- Last saved: {previous.get('timestamp', 'Unknown')}",
+            f"- Opportunity score: {previous.get('score', missing_value(language))} -> {score}",
+            f"- Dollar-volume direction estimate: {label(previous.get('capital_flow', missing_value(language)), language)} -> {label(summary.capital_flow.signal, language)}",
+            f"- Analyst consensus: {label(previous.get('analyst_consensus', missing_value(language)), language)} -> {label(summary.analyst.consensus, language)}",
+        ]
+    else:
+        lines = [
+            f"- 上次保存时间：{previous.get('timestamp', '未知')}",
+            f"- 机会评分变化：{previous.get('score', '暂无')} -> {score}",
+            f"- 成交额方向估算变化：{previous.get('capital_flow', '暂无')} -> {summary.capital_flow.signal}",
+            f"- 分析师共识变化：{previous.get('analyst_consensus', '暂无')} -> {summary.analyst.consensus}",
+        ]
 
     if business is not None:
         previous_keywords = previous.get("keyword_counts", {}) or {}
@@ -177,12 +257,13 @@ def format_history_comparison(summary: StockSummary, previous: dict | None, busi
             if count != old_count:
                 changes.append(f"{keyword}: {old_count} -> {count}")
         if changes:
-            lines.append("- 关键词变化：" + "；".join(changes[:8]))
+            lines.append(("- Keyword changes: " if language == "en" else "- 关键词变化：") + ("; ".join(changes[:8]) if language == "en" else "；".join(changes[:8])))
 
-    return "## 历史报告对比\n\n" + "\n".join(lines) + "\n"
+    title = "## Historical Report Comparison" if language == "en" else "## 历史报告对比"
+    return title + "\n\n" + "\n".join(lines) + "\n"
 
 
-def format_industry_ranking(rows: list[dict[str, str | float | None]]) -> str:
+def format_industry_ranking(rows: list[dict[str, str | float | None]], language: Language = "zh") -> str:
     if len(rows) < 2:
         return ""
 
@@ -202,7 +283,10 @@ def format_industry_ranking(rows: list[dict[str, str | float | None]]) -> str:
         scored.append((max(0, min(100, score)), row))
 
     scored.sort(key=lambda item: item[0], reverse=True)
-    table = "| 排名 | 股票代码 | 公司名称 | 行业 | 机会评分 |\n| ---: | --- | --- | --- | ---: |\n"
+    if language == "en":
+        table = "| Rank | Symbol | Company | Industry | Opportunity score |\n| ---: | --- | --- | --- | ---: |\n"
+    else:
+        table = "| 排名 | 股票代码 | 公司名称 | 行业 | 机会评分 |\n| ---: | --- | --- | --- | ---: |\n"
     for index, (score, row) in enumerate(scored, start=1):
         table += f"| {index} | {row['股票代码']} | {row['公司名称']} | {row['细分行业']} | {score}/100 |\n"
-    return "## 行业 / 股票池机会评分\n\n" + table
+    return ("## Industry / Watchlist Opportunity Ranking\n\n" if language == "en" else "## 行业 / 股票池机会评分\n\n") + table

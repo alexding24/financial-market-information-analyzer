@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 import pandas as pd
 
+from analysis.i18n import Language, field_label, is_missing_display, label, missing_value
 from data.stock_data import StockSnapshot
 
 
@@ -53,17 +54,25 @@ class StockSummary:
     data_sources: dict[str, str]
 
 
-def _pct(value: float | None) -> str:
+def _pct(value: float | None, language: Language = "zh") -> str:
     if value is None:
-        return "暂无数据"
+        return missing_value(language)
     return f"{value * 100:.1f}%"
 
 
-def _money(value: float | None, currency: str) -> str:
+def _money(value: float | None, currency: str, language: Language = "zh") -> str:
     if value is None:
-        return "暂无数据"
+        return missing_value(language)
     sign = "-" if value < 0 else ""
     abs_value = abs(value)
+    if language == "en":
+        if abs_value >= 1_000_000_000_000:
+            return f"{sign}{currency} {abs_value / 1_000_000_000_000:.2f}T"
+        if abs_value >= 1_000_000_000:
+            return f"{sign}{currency} {abs_value / 1_000_000_000:.2f}B"
+        if abs_value >= 1_000_000:
+            return f"{sign}{currency} {abs_value / 1_000_000:.2f}M"
+        return f"{sign}{currency} {abs_value:,.0f}"
     if abs_value >= 1_000_000_000_000:
         return f"{sign}{currency} {abs_value / 1_000_000_000_000:.2f} 万亿"
     if abs_value >= 1_000_000_000:
@@ -232,27 +241,28 @@ def summarize_stock(snapshot: StockSnapshot) -> StockSummary:
     )
 
 
-def format_summary_value(summary: StockSummary) -> dict[str, str]:
-    return {
+def format_summary_value(summary: StockSummary, language: Language = "zh") -> dict[str, str]:
+    values = {
         "股票代码": summary.symbol,
         "公司名称": summary.company_name,
         "行业板块": summary.sector,
         "细分行业": summary.industry,
-        "当前价格": _money(summary.current_price, summary.currency),
-        "市值": _money(summary.market_cap, summary.currency),
-        "过去市盈率": "暂无数据" if summary.trailing_pe is None else f"{summary.trailing_pe:.1f}",
-        "未来市盈率": "暂无数据" if summary.forward_pe is None else f"{summary.forward_pe:.1f}",
-        "收入增长": _pct(summary.revenue_growth),
-        "利润率": _pct(summary.profit_margins),
-        "近六个月涨跌幅": _pct(summary.six_month_return),
-        "近期趋势": summary.recent_trend,
-        "基础风险等级": summary.risk_level,
-        "成交额方向估算": summary.capital_flow.signal,
-        "分析师共识": summary.analyst.consensus,
-        "分析师数量": "暂无数据" if summary.analyst.total_ratings is None else str(summary.analyst.total_ratings),
-        "平均目标价": _money(summary.analyst.target_mean, summary.currency),
-        "目标价空间": _pct(summary.analyst.target_upside),
+        "当前价格": _money(summary.current_price, summary.currency, language),
+        "市值": _money(summary.market_cap, summary.currency, language),
+        "过去市盈率": missing_value(language) if summary.trailing_pe is None else f"{summary.trailing_pe:.1f}",
+        "未来市盈率": missing_value(language) if summary.forward_pe is None else f"{summary.forward_pe:.1f}",
+        "收入增长": _pct(summary.revenue_growth, language),
+        "利润率": _pct(summary.profit_margins, language),
+        "近六个月涨跌幅": _pct(summary.six_month_return, language),
+        "近期趋势": label(summary.recent_trend, language),
+        "基础风险等级": label(summary.risk_level, language),
+        "成交额方向估算": label(summary.capital_flow.signal, language),
+        "分析师共识": label(summary.analyst.consensus, language),
+        "分析师数量": missing_value(language) if summary.analyst.total_ratings is None else str(summary.analyst.total_ratings),
+        "平均目标价": _money(summary.analyst.target_mean, summary.currency, language),
+        "目标价空间": _pct(summary.analyst.target_upside, language),
     }
+    return {field_label(key, language): value for key, value in values.items()}
 
 
 def comparison_row(summary: StockSummary) -> dict[str, str | float | None]:
@@ -276,78 +286,92 @@ def comparison_row(summary: StockSummary) -> dict[str, str | float | None]:
     }
 
 
-def format_capital_flow_table(summary: StockSummary) -> str:
-    header = "| 周期 | 成交额方向估算 | 大额成交日估算 | 普通成交日估算 |\n"
+def format_capital_flow_table(summary: StockSummary, language: Language = "zh") -> str:
+    if language == "en":
+        header = "| Period | Dollar-volume direction estimate | High-volume day estimate | Normal-volume day estimate |\n"
+        period_labels = {"近1个月": "Last 1 month", "近3个月": "Last 3 months", "近6个月": "Last 6 months"}
+    else:
+        header = "| 周期 | 成交额方向估算 | 大额成交日估算 | 普通成交日估算 |\n"
+        period_labels = {}
     divider = "| --- | ---: | ---: | ---: |\n"
     body = ""
     for period in summary.capital_flow.periods:
         body += (
-            f"| {period.label} | {_money(period.net_flow, summary.currency)} | "
-            f"{_money(period.large_flow, summary.currency)} | {_money(period.small_flow, summary.currency)} |\n"
+            f"| {period_labels.get(period.label, period.label)} | {_money(period.net_flow, summary.currency, language)} | "
+            f"{_money(period.large_flow, summary.currency, language)} | {_money(period.small_flow, summary.currency, language)} |\n"
         )
     return header + divider + body
 
 
-def data_quality_score(summary: StockSummary) -> int:
-    values = format_summary_value(summary)
+def data_quality_score(summary: StockSummary, language: Language = "zh") -> int:
+    values = format_summary_value(summary, language)
     tracked_fields = [
-        "行业板块",
-        "细分行业",
-        "当前价格",
-        "市值",
-        "过去市盈率",
-        "未来市盈率",
-        "收入增长",
-        "利润率",
-        "分析师共识",
-        "平均目标价",
+        field_label(field, language)
+        for field in ["行业板块", "细分行业", "当前价格", "市值", "过去市盈率", "未来市盈率", "收入增长", "利润率", "分析师共识", "平均目标价"]
     ]
-    available = sum(1 for field in tracked_fields if values.get(field) not in {"暂无数据", "暂无评级数据", "Unknown"})
+    available = sum(1 for field in tracked_fields if not is_missing_display(values.get(field, "")))
     return round(available / len(tracked_fields) * 100)
 
 
-def format_data_quality_report(summary: StockSummary) -> str:
+def format_data_quality_report(summary: StockSummary, language: Language = "zh") -> str:
     sources = summary.data_sources or {}
-    values = format_summary_value(summary)
+    values = format_summary_value(summary, language)
+    tracked_fields = ["行业板块", "细分行业", "当前价格", "市值", "过去市盈率", "未来市盈率", "收入增长", "利润率", "分析师共识", "平均目标价"]
     missing_fields = [
-        field
-        for field in ["行业板块", "细分行业", "当前价格", "市值", "过去市盈率", "未来市盈率", "收入增长", "利润率", "分析师共识", "平均目标价"]
-        if values.get(field) in {"暂无数据", "暂无评级数据", "Unknown"}
+        field_label(field, language)
+        for field in tracked_fields
+        if is_missing_display(values.get(field_label(field, language), ""))
     ]
     source_rows = [
-        ("价格历史", sources.get("price_history", "Unknown")),
-        ("公司名称", sources.get("company_name", "Unknown")),
-        ("行业板块", sources.get("sector", "Unknown")),
-        ("细分行业", sources.get("industry", "Unknown")),
-        ("当前价格", sources.get("current_price", "Unknown")),
-        ("市值", sources.get("market_cap", "Unknown")),
+        ("价格历史" if language == "zh" else "Price history", sources.get("price_history", "Unknown")),
+        (field_label("公司名称", language), sources.get("company_name", "Unknown")),
+        (field_label("行业板块", language), sources.get("sector", "Unknown")),
+        (field_label("细分行业", language), sources.get("industry", "Unknown")),
+        (field_label("当前价格", language), sources.get("current_price", "Unknown")),
+        (field_label("市值", language), sources.get("market_cap", "Unknown")),
         ("PE", sources.get("trailing_pe", "Unknown")),
-        ("收入增长", sources.get("revenue_growth", "Unknown")),
-        ("利润率", sources.get("profit_margins", "Unknown")),
-        ("分析师评级", sources.get("recommendations_summary", "Unknown")),
-        ("目标价", sources.get("analyst_price_targets", "Unknown")),
+        (field_label("收入增长", language), sources.get("revenue_growth", "Unknown")),
+        (field_label("利润率", language), sources.get("profit_margins", "Unknown")),
+        ("分析师评级" if language == "zh" else "Analyst ratings", sources.get("recommendations_summary", "Unknown")),
+        ("目标价" if language == "zh" else "Target price", sources.get("analyst_price_targets", "Unknown")),
     ]
-    table = "| 字段 | 来源 |\n| --- | --- |\n"
+    table = ("| 字段 | 来源 |\n" if language == "zh" else "| Field | Source |\n") + "| --- | --- |\n"
     table += "".join(f"| {field} | {source} |\n" for field, source in source_rows)
-    missing_text = "无明显缺失" if not missing_fields else "、".join(missing_fields)
+    missing_text = ("无明显缺失" if language == "zh" else "No obvious gaps") if not missing_fields else ("、".join(missing_fields) if language == "zh" else ", ".join(missing_fields))
+    if language == "en":
+        return f"""## Data Quality
+
+- **Completeness score**: {data_quality_score(summary, language)}/100
+- **Missing fields**: {missing_text}
+
+{table}
+"""
     return f"""## 数据质量
 
-- **完整度评分**：{data_quality_score(summary)}/100
+- **完整度评分**：{data_quality_score(summary, language)}/100
 - **缺失字段**：{missing_text}
 
 {table}
 """
 
 
-def format_analyst_summary(summary: StockSummary) -> str:
+def format_analyst_summary(summary: StockSummary, language: Language = "zh") -> str:
     analyst = summary.analyst
-    bullish = _pct(analyst.bullish_ratio)
-    hold = _pct(analyst.hold_ratio)
-    bearish = _pct(analyst.bearish_ratio)
+    bullish = _pct(analyst.bullish_ratio, language)
+    hold = _pct(analyst.hold_ratio, language)
+    bearish = _pct(analyst.bearish_ratio, language)
+    if language == "en":
+        return (
+            f"- **Consensus rating**: {label(analyst.consensus, language)}\n"
+            f"- **Covered analysts**: {missing_value(language) if analyst.total_ratings is None else analyst.total_ratings}\n"
+            f"- **Bullish / neutral / bearish mix**: {bullish} / {hold} / {bearish}\n"
+            f"- **Average target price**: {_money(analyst.target_mean, summary.currency, language)}\n"
+            f"- **Upside vs. current price**: {_pct(analyst.target_upside, language)}"
+        )
     return (
-        f"- **共识评级**：{analyst.consensus}\n"
-        f"- **覆盖分析师数量**：{'暂无数据' if analyst.total_ratings is None else analyst.total_ratings}\n"
+        f"- **共识评级**：{label(analyst.consensus, language)}\n"
+        f"- **覆盖分析师数量**：{missing_value(language) if analyst.total_ratings is None else analyst.total_ratings}\n"
         f"- **看多 / 中性 / 看空比例**：{bullish} / {hold} / {bearish}\n"
-        f"- **平均目标价**：{_money(analyst.target_mean, summary.currency)}\n"
-        f"- **相对当前价格空间**：{_pct(analyst.target_upside)}"
+        f"- **平均目标价**：{_money(analyst.target_mean, summary.currency, language)}\n"
+        f"- **相对当前价格空间**：{_pct(analyst.target_upside, language)}"
     )
