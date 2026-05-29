@@ -26,7 +26,7 @@ from data.market_symbols import MARKET_OPTIONS
 from data.public_documents import fetch_public_documents
 from data.stock_data import fetch_stock_snapshot
 from data.ticker_search import suggest_tickers, ticker_from_suggestion
-from yfinance.exceptions import YFRateLimitError
+from data.yfinance_compat import YFRateLimitError
 
 
 st.set_page_config(page_title="金融市场信息分析助手", layout="centered")
@@ -128,6 +128,11 @@ with st.expander("可选：免费数据源 API key"):
         placeholder="例如 https://example.com/api?symbol={symbol}&apikey={api_key}",
     )
     custom_api_key = st.text_input("自定义 API key", type="password")
+    sec_user_agent = st.text_input(
+        "SEC User-Agent",
+        value=os.getenv("SEC_USER_AGENT", "financial-market-analyzer/0.1 research@example.com"),
+        help="SEC 建议填写应用名和真实联系邮箱，例如 financial-market-analyzer/0.1 your@email.com",
+    )
     _set_optional_api_key("FMP_API_KEY", fmp_api_key)
     _set_optional_api_key("FINNHUB_API_KEY", finnhub_api_key)
     _set_optional_api_key("ALPHA_VANTAGE_API_KEY", alpha_vantage_api_key)
@@ -135,6 +140,7 @@ with st.expander("可选：免费数据源 API key"):
     _set_optional_api_key("TWELVE_DATA_API_KEY", twelve_data_api_key)
     _set_optional_env("CUSTOM_FINANCIAL_API_URL", custom_api_url)
     _set_optional_api_key("CUSTOM_FINANCIAL_API_KEY", custom_api_key)
+    _set_optional_env("SEC_USER_AGENT", sec_user_agent)
 
 with st.expander("可选：加入 earnings call、meeting、10-K 业务信号分析"):
     earnings_call_text = st.text_area("最近 earnings call 摘要或文字", height=120)

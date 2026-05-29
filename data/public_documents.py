@@ -9,6 +9,7 @@ import yfinance as yf
 from bs4 import BeautifulSoup
 
 from analysis.business_signals import SourceDocument
+from data.cache import ttl_cache
 from data.market_symbols import is_us_symbol
 
 
@@ -109,6 +110,7 @@ def _company_terms(symbol: str, company_name: str | None) -> list[str]:
     return list(dict.fromkeys(terms))
 
 
+@ttl_cache(seconds=1800)
 def fetch_yahoo_news_documents(symbol: str, company_name: str | None = None, max_items: int = 8) -> PublicDocumentResult:
     try:
         news_items = yf.Ticker(symbol).news or []
@@ -153,7 +155,8 @@ def _latest_filing_metadata(cik: str, forms: set[str]) -> tuple[str, str, str] |
     return None
 
 
-def fetch_sec_filing_document(symbol: str, forms: set[str] | None = None) -> PublicDocumentResult:
+@ttl_cache(seconds=21600)
+def fetch_sec_filing_document(symbol: str, forms: tuple[str, ...] | None = None) -> PublicDocumentResult:
     target_forms = forms or {"10-K", "10-Q"}
     try:
         cik = _ticker_to_cik(symbol)
@@ -181,6 +184,7 @@ def fetch_sec_filing_document(symbol: str, forms: set[str] | None = None) -> Pub
         return PublicDocumentResult([], [f"{symbol}: SEC 申报读取失败：{exc}"])
 
 
+@ttl_cache(seconds=1800)
 def fetch_public_documents(symbol: str, company_name: str | None = None) -> PublicDocumentResult:
     documents: list[SourceDocument] = []
     notes: list[str] = []

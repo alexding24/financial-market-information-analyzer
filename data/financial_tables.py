@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import pandas as pd
 import yfinance as yf
 
+from data.cache import ttl_cache
 from data.sec_company_facts import fetch_sec_company_facts
 
 
@@ -46,6 +47,7 @@ def _metric(name: str, frame: pd.DataFrame) -> FinancialMetric:
     return FinancialMetric(name=name, latest=latest, previous=previous, change=change)
 
 
+@ttl_cache(seconds=3600)
 def fetch_financial_metrics(symbol: str) -> list[FinancialMetric]:
     ticker = yf.Ticker(symbol)
     frames = []

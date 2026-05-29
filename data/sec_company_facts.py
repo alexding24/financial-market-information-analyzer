@@ -8,6 +8,8 @@ from typing import Any
 
 import requests
 
+from data.cache import ttl_cache
+
 
 SEC_COMPANY_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_COMPANY_FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik}.json"
@@ -45,6 +47,7 @@ SEC_FACT_ROWS = {
 }
 
 
+@ttl_cache(seconds=21600)
 def fetch_sec_company_facts(symbol: str) -> SecCompanyFacts:
     cik = ticker_to_cik(symbol)
     if not cik:

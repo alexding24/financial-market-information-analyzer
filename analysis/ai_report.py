@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import os
 
-from openai import OpenAI
+try:
+    from openai import OpenAI
+except ImportError:
+    OpenAI = None
 
 from analysis.stock_summary import (
     StockSummary,
     format_analyst_summary,
     format_capital_flow_table,
+    format_data_quality_report,
     format_summary_value,
 )
 
@@ -17,10 +21,11 @@ def _fallback_report(summary: StockSummary) -> str:
     metrics = "\n".join(f"- **{key}**：{value}" for key, value in values.items())
     capital_flow_table = format_capital_flow_table(summary)
     analyst_summary = format_analyst_summary(summary)
+    data_quality = format_data_quality_report(summary)
     missing_fields = [key for key, value in values.items() if value in {"暂无数据", "暂无评级数据", "Unknown"}]
-    data_quality = ""
+    data_quality_note = ""
     if missing_fields:
-        data_quality = (
+        data_quality_note = (
             "\n## 数据完整度提醒\n\n"
             f"本次以下字段没有从公开免费数据源稳定读到：{', '.join(missing_fields)}。\n\n"
             "常见原因是 Yahoo Finance / 免费行情源限流、该市场不公开该字段，或分析师评级需要更专业的数据源。"
@@ -43,14 +48,15 @@ def _fallback_report(summary: StockSummary) -> str:
 
 {summary.company_name} 属于 {summary.sector} 板块，细分行业是 {summary.industry}。从最近六个月股价表现看，走势为 **{summary.recent_trend}**，基础风险等级为 **{summary.risk_level}**。
 
-整体来看，这只股票目前 **{opportunity}**。资金流向估算显示 **{summary.capital_flow.signal}**，分析师共识为 **{summary.analyst.consensus}**。
+整体来看，这只股票目前 **{opportunity}**。成交额方向估算显示 **{summary.capital_flow.signal}**，分析师共识为 **{summary.analyst.consensus}**。
+{data_quality_note}
 {data_quality}
 
-## 资金流向估算
+## 成交额方向估算
 
 {capital_flow_table}
 
-说明：这里的“大额成交日”是用成交量明显高于近 20 日平均成交量的交易日近似估算，不等于真实逐笔大单数据。
+说明：这里的“大额成交日”是用成交量明显高于近 20 日平均成交量的交易日近似估算，不等于真实逐笔大单或小单资金流。
 
 ## 分析师评价
 
@@ -72,21 +78,25 @@ def _build_prompt(summary: StockSummary) -> str:
     metrics = "\n".join(f"{key}: {value}" for key, value in values.items())
     capital_flow_table = format_capital_flow_table(summary)
     analyst_summary = format_analyst_summary(summary)
+    data_quality = format_data_quality_report(summary)
     return f"""请根据以下股票基础数据，写一份中文股票分析报告。
 
 要求：
 - 语言清楚，适合金融初学者阅读
 - 不要承诺未来收益
 - 明确说明这不是投资建议
-- 包含：公司概况、股价趋势、估值和增长、资金流向估算、分析师评价、主要风险、下一步应该看什么
+- 包含：公司概况、股价趋势、估值和增长、成交额方向估算、数据质量、分析师评价、主要风险、下一步应该看什么
 - 不要编造没有给出的数据
-- 说明资金流向是用价格和成交量估算，不是真实逐笔大单数据
+- 说明成交额方向估算是用价格和成交量估算，不是真实逐笔大单数据
 
 数据：
 {metrics}
 
-资金流向估算：
+成交额方向估算：
 {capital_flow_table}
+
+数据质量：
+{data_quality}
 
 分析师评价：
 {analyst_summary}
@@ -95,7 +105,7 @@ def _build_prompt(summary: StockSummary) -> str:
 
 def build_report(summary: StockSummary) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
-    if not api_key:
+    if not api_key or OpenAI is None:
         return _fallback_report(summary)
 
     client = OpenAI(api_key=api_key)
@@ -107,4 +117,7 @@ def build_report(summary: StockSummary) -> str:
         ],
         temperature=0.3,
     )
-    return response.choices[0].message.content or _fallback_report(summary)
+    report = response.choices[0].message.content or _fallback_report(summary)
+    if "## 数据质量" not in report:
+        report += "\n\n" + format_data_quality_report(summary)
+    return report

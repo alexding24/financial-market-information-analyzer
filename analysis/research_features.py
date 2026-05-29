@@ -47,12 +47,12 @@ def opportunity_score(summary: StockSummary) -> tuple[int, list[str]]:
             score -= 10
             reasons.append("未来市盈率偏高")
 
-    if summary.capital_flow.signal == "资金流入偏强":
+    if summary.capital_flow.signal == "成交额方向偏流入":
         score += 8
-        reasons.append("资金流向偏积极")
-    elif summary.capital_flow.signal == "资金流出偏强":
+        reasons.append("成交额方向偏积极")
+    elif summary.capital_flow.signal == "成交额方向偏流出":
         score -= 8
-        reasons.append("资金流向偏谨慎")
+        reasons.append("成交额方向偏谨慎")
 
     if summary.analyst.consensus in {"强烈看多", "看多"}:
         score += 7
@@ -74,8 +74,8 @@ def format_buy_checklist(summary: StockSummary) -> str:
         positives.append("股价趋势偏强，说明市场短期认可度较高。")
     if summary.revenue_growth is not None and summary.revenue_growth > 0:
         positives.append("收入仍在增长，需要继续确认增长质量。")
-    if summary.capital_flow.signal == "资金流入偏强":
-        positives.append("近三个月资金流向估算偏积极。")
+    if summary.capital_flow.signal == "成交额方向偏流入":
+        positives.append("近三个月成交额方向估算偏积极。")
     if summary.analyst.consensus in {"强烈看多", "看多"}:
         positives.append("分析师整体评价偏正面。")
 
@@ -164,7 +164,7 @@ def format_history_comparison(summary: StockSummary, previous: dict | None, busi
     lines = [
         f"- 上次保存时间：{previous.get('timestamp', '未知')}",
         f"- 机会评分变化：{previous.get('score', '暂无')} -> {score}",
-        f"- 资金流向变化：{previous.get('capital_flow', '暂无')} -> {summary.capital_flow.signal}",
+        f"- 成交额方向估算变化：{previous.get('capital_flow', '暂无')} -> {summary.capital_flow.signal}",
         f"- 分析师共识变化：{previous.get('analyst_consensus', '暂无')} -> {summary.analyst.consensus}",
     ]
 
@@ -195,7 +195,7 @@ def format_industry_ranking(rows: list[dict[str, str | float | None]]) -> str:
             score += 15 if row["收入增长"] > 0.2 else -10 if row["收入增长"] < 0 else 0
         if isinstance(row.get("利润率"), float):
             score += 10 if row["利润率"] > 0.2 else -10 if row["利润率"] < 0 else 0
-        if row.get("资金流向") == "资金流入偏强":
+        if row.get("成交额方向估算") == "成交额方向偏流入":
             score += 10
         if row.get("分析师共识") in {"强烈看多", "看多"}:
             score += 10

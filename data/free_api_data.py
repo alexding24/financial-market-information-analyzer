@@ -8,6 +8,7 @@ from urllib.parse import quote_plus
 import pandas as pd
 import requests
 
+from data.cache import ttl_cache
 from data.sec_company_facts import fetch_sec_company_facts
 
 
@@ -25,8 +26,10 @@ class FreeApiData:
     profit_margins: float | None = None
     recommendations_summary: pd.DataFrame | None = None
     analyst_price_targets: dict[str, float] | None = None
+    sources: dict[str, str] = None
 
 
+@ttl_cache(seconds=900)
 def fetch_free_api_data(symbol: str) -> FreeApiData:
     merged = FreeApiData()
     provider_loaders = {
@@ -69,7 +72,12 @@ def _merge(base: FreeApiData, update: FreeApiData) -> FreeApiData:
             else update.recommendations_summary
         ),
         analyst_price_targets=base.analyst_price_targets or update.analyst_price_targets,
+        sources={**(update.sources or {}), **(base.sources or {})},
     )
+
+
+def _source(provider: str, **values: Any) -> dict[str, str]:
+    return {field: provider for field, value in values.items() if value is not None}
 
 
 def _get_json(url: str, params: dict[str, str]) -> Any:
@@ -169,7 +177,7 @@ def _fetch_fmp_data(symbol: str) -> FreeApiData:
     revenue_growth = _revenue_growth_from_income(income)
     target_mean = _pick_num(price_target, ["targetMean", "targetMeanPrice", "priceTargetAverage", "average"])
 
-    return FreeApiData(
+    data = FreeApiData(
         company_name=profile.get("companyName") or profile.get("companyNameLong"),
         sector=profile.get("sector"),
         industry=profile.get("industry"),
@@ -182,6 +190,7 @@ def _fetch_fmp_data(symbol: str) -> FreeApiData:
         profit_margins=_pick_num(ratios, ["netProfitMarginTTM", "netProfitMargin"]),
         analyst_price_targets=_target_dict(target_mean),
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("Financial Modeling Prep", **data.__dict__)})
 
 
 def _revenue_growth_from_income(value: Any) -> float | None:
@@ -209,7 +218,7 @@ def _fetch_finnhub_data(symbol: str) -> FreeApiData:
     market_cap_millions = _num(profile.get("marketCapitalization"), scale=1_000_000)
     target_mean = _pick_num(price_target, ["targetMean", "targetMedian"])
 
-    return FreeApiData(
+    data = FreeApiData(
         company_name=profile.get("name"),
         sector=profile.get("finnhubIndustry"),
         industry=profile.get("finnhubIndustry"),
@@ -223,6 +232,7 @@ def _fetch_finnhub_data(symbol: str) -> FreeApiData:
         recommendations_summary=_recommendations_frame(latest_rec),
         analyst_price_targets=_target_dict(target_mean),
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("Finnhub", **data.__dict__)})
 
 
 def _fetch_alpha_vantage_data(symbol: str) -> FreeApiData:
@@ -235,7 +245,7 @@ def _fetch_alpha_vantage_data(symbol: str) -> FreeApiData:
     )
     target = _pick_num(overview, ["AnalystTargetPrice"])
 
-    return FreeApiData(
+    data = FreeApiData(
         company_name=overview.get("Name"),
         sector=overview.get("Sector"),
         industry=overview.get("Industry"),
@@ -247,6 +257,7 @@ def _fetch_alpha_vantage_data(symbol: str) -> FreeApiData:
         profit_margins=_pick_num(overview, ["ProfitMargin"]),
         analyst_price_targets=_target_dict(target),
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("Alpha Vantage", **data.__dict__)})
 
 
 def _fetch_eodhd_data(symbol: str) -> FreeApiData:
@@ -267,7 +278,7 @@ def _fetch_eodhd_data(symbol: str) -> FreeApiData:
     forward_pe = _pick_num(flat, ["Valuation.ForwardPE", "Highlights.ForwardPE"])
     target = _pick_num(flat, ["Highlights.WallStreetTargetPrice", "AnalystRatings.TargetPrice"])
 
-    return FreeApiData(
+    data = FreeApiData(
         company_name=_pick_text(flat, ["General.Name", "Name"]),
         sector=_pick_text(flat, ["General.Sector", "Sector"]),
         industry=_pick_text(flat, ["General.Industry", "Industry"]),
@@ -280,6 +291,7 @@ def _fetch_eodhd_data(symbol: str) -> FreeApiData:
         profit_margins=_pick_num(flat, ["Highlights.ProfitMargin", "ProfitMargin"]),
         analyst_price_targets=_target_dict(target),
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("EODHD", **data.__dict__)})
 
 
 def _eodhd_symbol(symbol: str) -> str:
@@ -300,7 +312,7 @@ def _fetch_twelve_data(symbol: str) -> FreeApiData:
     quote = _first(_get_json("https://api.twelvedata.com/quote", {"symbol": symbol, "apikey": api_key}))
     profile = _first(_get_json("https://api.twelvedata.com/profile", {"symbol": symbol, "apikey": api_key}))
     flat = _flatten({**quote, **profile})
-    return FreeApiData(
+    data = FreeApiData(
         company_name=_pick_text(flat, ["name", "company_name"]),
         sector=_pick_text(flat, ["sector"]),
         industry=_pick_text(flat, ["industry"]),
@@ -308,6 +320,7 @@ def _fetch_twelve_data(symbol: str) -> FreeApiData:
         current_price=_pick_num(flat, ["close", "price"]),
         market_cap=_pick_num(flat, ["market_cap", "marketCapitalization"]),
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("Twelve Data", **data.__dict__)})
 
 
 def _fetch_custom_data(symbol: str) -> FreeApiData:
@@ -321,7 +334,7 @@ def _fetch_custom_data(symbol: str) -> FreeApiData:
     flat = _flatten(payload)
     target = _pick_num(flat, ["targetMean", "target_mean", "analystTargetPrice", "AnalystTargetPrice"])
 
-    return FreeApiData(
+    data = FreeApiData(
         company_name=_pick_text(flat, ["companyName", "company_name", "name", "Name"]),
         sector=_pick_text(flat, ["sector", "Sector"]),
         industry=_pick_text(flat, ["industry", "Industry"]),
@@ -334,14 +347,16 @@ def _fetch_custom_data(symbol: str) -> FreeApiData:
         profit_margins=_pick_num(flat, ["profitMargins", "ProfitMargin"]),
         analyst_price_targets=_target_dict(target),
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("Custom API", **data.__dict__)})
 
 
 def _fetch_sec_data(symbol: str) -> FreeApiData:
     facts = fetch_sec_company_facts(symbol)
-    return FreeApiData(
+    data = FreeApiData(
         revenue_growth=facts.revenue_growth,
         profit_margins=facts.profit_margins,
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("SEC EDGAR", **data.__dict__)})
 
 
 def _fetch_akshare_data(symbol: str) -> FreeApiData:
@@ -370,7 +385,7 @@ def _fetch_akshare_a_share_data(ak: Any, symbol: str) -> FreeApiData:
     info = _ak_dict(lambda: ak.stock_individual_info_em(symbol=code), "item", "value")
     spot = _ak_row(lambda: ak.stock_zh_a_spot_em(), "代码", code)
 
-    return FreeApiData(
+    data = FreeApiData(
         company_name=_pick_text(info, ["股票简称", "股票名称", "证券简称"]) or _pick_text(spot, ["名称"]),
         sector=_pick_text(info, ["行业", "所属行业"]),
         industry=_pick_text(info, ["行业", "所属行业"]),
@@ -380,13 +395,14 @@ def _fetch_akshare_a_share_data(ak: Any, symbol: str) -> FreeApiData:
         trailing_pe=_pick_num(spot, ["市盈率-动态", "市盈率"]),
         profit_margins=None,
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("AkShare", **data.__dict__)})
 
 
 def _fetch_akshare_hk_data(ak: Any, symbol: str) -> FreeApiData:
     code = _hk_code(symbol)
     spot = _ak_row(lambda: ak.stock_hk_spot_em(), "代码", code)
 
-    return FreeApiData(
+    data = FreeApiData(
         company_name=_pick_text(spot, ["名称", "中文名称"]),
         sector=_pick_text(spot, ["行业"]),
         industry=_pick_text(spot, ["行业"]),
@@ -395,6 +411,7 @@ def _fetch_akshare_hk_data(ak: Any, symbol: str) -> FreeApiData:
         market_cap=_pick_num(spot, ["总市值", "市值"]),
         trailing_pe=_pick_num(spot, ["市盈率", "PE"]),
     )
+    return FreeApiData(**{**data.__dict__, "sources": _source("AkShare", **data.__dict__)})
 
 
 def _ak_row(loader: Any, code_column: str, code: str) -> dict[str, Any]:

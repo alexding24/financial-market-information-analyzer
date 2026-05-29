@@ -47,7 +47,7 @@ def parse_symbols(raw_symbols: list[str], market: str = "auto") -> list[str]:
 
 
 def build_comparison_report(rows: list[dict[str, str | float | None]]) -> str:
-    header = "| 股票代码 | 公司名称 | 行业板块 | 细分行业 | 近六个月涨跌幅 | 收入增长 | 利润率 | 未来市盈率 | 资金流向 | 分析师共识 | 目标价空间 | 风险 |\n"
+    header = "| 股票代码 | 公司名称 | 行业板块 | 细分行业 | 近六个月涨跌幅 | 收入增长 | 利润率 | 未来市盈率 | 成交额方向估算 | 分析师共识 | 目标价空间 | 风险 |\n"
     divider = "| --- | --- | --- | --- | ---: | ---: | ---: | ---: | --- | --- | ---: | --- |\n"
     body = ""
 
@@ -63,7 +63,7 @@ def build_comparison_report(rows: list[dict[str, str | float | None]]) -> str:
             f"{'暂无数据' if revenue_growth is None else f'{revenue_growth:.1%}'} | "
             f"{'暂无数据' if profit_margins is None else f'{profit_margins:.1%}'} | "
             f"{'暂无数据' if forward_pe is None else f'{forward_pe:.1f}'} | "
-            f"{row['资金流向']} | "
+            f"{row['成交额方向估算']} | "
             f"{row['分析师共识']} | "
             f"{'暂无数据' if target_upside is None else f'{target_upside:.1%}'} | "
             f"{row['基础风险等级']} |\n"

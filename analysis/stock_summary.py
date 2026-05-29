@@ -50,6 +50,7 @@ class StockSummary:
     risk_level: str
     capital_flow: CapitalFlowSummary
     analyst: AnalystSummary
+    data_sources: dict[str, str]
 
 
 def _pct(value: float | None) -> str:
@@ -102,10 +103,10 @@ def _capital_flow_signal(three_month_flow: float, three_month_turnover: float) -
         return "暂无足够数据"
     flow_ratio = three_month_flow / three_month_turnover
     if flow_ratio >= 0.03:
-        return "资金流入偏强"
+        return "成交额方向偏流入"
     if flow_ratio <= -0.03:
-        return "资金流出偏强"
-    return "资金流向平衡"
+        return "成交额方向偏流出"
+    return "成交额方向平衡"
 
 
 def _sum_signed_flow(history: pd.DataFrame, days: int | None, label: str) -> CapitalFlowPeriod:
@@ -227,6 +228,7 @@ def summarize_stock(snapshot: StockSnapshot) -> StockSummary:
         risk_level=_risk_level(snapshot, six_month_return),
         capital_flow=capital_flow,
         analyst=analyst,
+        data_sources=snapshot.data_sources,
     )
 
 
@@ -245,7 +247,7 @@ def format_summary_value(summary: StockSummary) -> dict[str, str]:
         "近六个月涨跌幅": _pct(summary.six_month_return),
         "近期趋势": summary.recent_trend,
         "基础风险等级": summary.risk_level,
-        "资金流向": summary.capital_flow.signal,
+        "成交额方向估算": summary.capital_flow.signal,
         "分析师共识": summary.analyst.consensus,
         "分析师数量": "暂无数据" if summary.analyst.total_ratings is None else str(summary.analyst.total_ratings),
         "平均目标价": _money(summary.analyst.target_mean, summary.currency),
@@ -268,14 +270,14 @@ def comparison_row(summary: StockSummary) -> dict[str, str | float | None]:
         "近六个月涨跌幅": summary.six_month_return,
         "近期趋势": summary.recent_trend,
         "基础风险等级": summary.risk_level,
-        "资金流向": summary.capital_flow.signal,
+        "成交额方向估算": summary.capital_flow.signal,
         "分析师共识": summary.analyst.consensus,
         "目标价空间": summary.analyst.target_upside,
     }
 
 
 def format_capital_flow_table(summary: StockSummary) -> str:
-    header = "| 周期 | 净流入/流出估算 | 大额成交日估算 | 普通成交日估算 |\n"
+    header = "| 周期 | 成交额方向估算 | 大额成交日估算 | 普通成交日估算 |\n"
     divider = "| --- | ---: | ---: | ---: |\n"
     body = ""
     for period in summary.capital_flow.periods:
@@ -284,6 +286,57 @@ def format_capital_flow_table(summary: StockSummary) -> str:
             f"{_money(period.large_flow, summary.currency)} | {_money(period.small_flow, summary.currency)} |\n"
         )
     return header + divider + body
+
+
+def data_quality_score(summary: StockSummary) -> int:
+    values = format_summary_value(summary)
+    tracked_fields = [
+        "行业板块",
+        "细分行业",
+        "当前价格",
+        "市值",
+        "过去市盈率",
+        "未来市盈率",
+        "收入增长",
+        "利润率",
+        "分析师共识",
+        "平均目标价",
+    ]
+    available = sum(1 for field in tracked_fields if values.get(field) not in {"暂无数据", "暂无评级数据", "Unknown"})
+    return round(available / len(tracked_fields) * 100)
+
+
+def format_data_quality_report(summary: StockSummary) -> str:
+    sources = summary.data_sources or {}
+    values = format_summary_value(summary)
+    missing_fields = [
+        field
+        for field in ["行业板块", "细分行业", "当前价格", "市值", "过去市盈率", "未来市盈率", "收入增长", "利润率", "分析师共识", "平均目标价"]
+        if values.get(field) in {"暂无数据", "暂无评级数据", "Unknown"}
+    ]
+    source_rows = [
+        ("价格历史", sources.get("price_history", "Unknown")),
+        ("公司名称", sources.get("company_name", "Unknown")),
+        ("行业板块", sources.get("sector", "Unknown")),
+        ("细分行业", sources.get("industry", "Unknown")),
+        ("当前价格", sources.get("current_price", "Unknown")),
+        ("市值", sources.get("market_cap", "Unknown")),
+        ("PE", sources.get("trailing_pe", "Unknown")),
+        ("收入增长", sources.get("revenue_growth", "Unknown")),
+        ("利润率", sources.get("profit_margins", "Unknown")),
+        ("分析师评级", sources.get("recommendations_summary", "Unknown")),
+        ("目标价", sources.get("analyst_price_targets", "Unknown")),
+    ]
+    table = "| 字段 | 来源 |\n| --- | --- |\n"
+    table += "".join(f"| {field} | {source} |\n" for field, source in source_rows)
+    missing_text = "无明显缺失" if not missing_fields else "、".join(missing_fields)
+    return f"""## 数据质量
+
+- **完整度评分**：{data_quality_score(summary)}/100
+- **缺失字段**：{missing_text}
+
+{table}
+"""
 
 
 def format_analyst_summary(summary: StockSummary) -> str:
